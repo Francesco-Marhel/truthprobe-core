@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "truthprobe"
+version = "0.1.0"
+description = "Nucleo condiviso per gli studi sulla direzione di verita' nei modelli linguistici"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "CC-BY-4.0"}
+authors = [{name = "Francesco Karim Vicidomini"}]
+
+# Dipendenze minime, come da contratto di riproducibilita' del progetto.
+# transformers e datasets NON sono qui: servono solo agli strumenti che
+# caricano un modello, e restano un extra, cosi' le funzioni pure (geometria,
+# statistiche, gauge) si installano e si testano senza nulla di pesante.
+dependencies = ["torch>=2.0"]
+
+[project.optional-dependencies]
+models = ["transformers>=4.40", "datasets>=2.14", "safetensors"]
+
+[project.urls]
+Repository = "https://github.com/Francesco-Marhel/truthprobe-core"
+
+[tool.setuptools.packages.find]
+include = ["truthprobe*"]
