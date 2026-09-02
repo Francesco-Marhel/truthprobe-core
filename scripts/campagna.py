@@ -1194,7 +1194,8 @@ def main():
     if "behav" in stages:
         stage_behav(a, out)
 
-    piatto = [s for s in stages if s in ("signal", "anatomy", "flip", "geometria")]
+    piatto = [s for s in stages if s in ("signal", "anatomy", "flip",
+                                     "frames", "ablazione", "geometria")]
     raggr = [s for s in stages if s in ("categories", "dizionario")]
 
     if piatto:
