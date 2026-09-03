@@ -2,29 +2,32 @@
 """
 truthprobe.geometry
 
-L'asse e le sue proiezioni. Le funzioni qui sono portate da truth_probe.py
-mantenendo la semantica esatta, incluse le scelte che sembrano dettagli e non
-lo sono, elencate sotto. Il test di regressione verifica che i numeri
-coincidano con quelli canonici.
+The axis and its projections. The functions here are ported from truth_probe.py 
+preserving the exact semantics, including design choices that may seem like minor 
+details but are not. The regression test verifies that the numbers match 
+the canonical codebase exactly.
 
-TRE SCELTE CHE VANNO CONSERVATE
 
-1. L'ORIENTAMENTO USA LE MEDIE DELLE PROIEZIONI, non la somma delle
-   differenze. Sono quasi sempre d'accordo, ma non sempre: con distribuzioni
-   asimmetriche possono divergere, e il bit di segno cambierebbe.
+THREE DESIGN CHOICES THAT MUST BE PRESERVED
 
-2. LA CALIBRAZIONE E' ROBUSTA. med e scala vengono dalla mediana e dalla
-   deviazione assoluta mediana per 1.4826, non da media e deviazione standard.
-   Serve perche' pochi stati a norma alta sposterebbero la calibrazione.
+1. ORIENTATION RELIES ON THE MEANS OF THE PROJECTIONS, not on the sum of 
+   the differences. They almost always agree, but not always: under skewed 
+   distributions they can diverge, which would flip the sign bit.
 
-3. v2 E' ORTOGONALIZZATO CONTRO v1 esplicitamente. La SVD lo darebbe gia'
-   ortogonale, ma dopo il possibile cambio di segno di v1 la rimozione della
-   componente e' fatta comunque, e la si conserva.
+2. CALIBRATION IS ROBUST. 'med' and 'scale' are derived from the median and 
+   the median absolute deviation (MAD) scaled by 1.4826, rather than the mean 
+   and standard deviation. This is necessary because a few outlier states with 
+   high norms would otherwise skew the calibration distortingly.
 
-Il Lemma di identificazione senza etichette vale su fit_axis: la matrice di
-Gram delle righe di differenza non dipende da quale elemento della coppia si
-designa vero, quindi lo span di v1 e' invariante. L'argomento orient serve
-solo al null di permutazione e all'orientamento finale.
+3. v2 IS EXPLICITLY ORTHOGONALIZED AGAINST v1. SVD would already yield an 
+   orthogonal output; however, following a potential sign flip of v1, the 
+   component removal is performed explicitly anyway to guarantee and preserve orthogonality.
+
+
+The label-free identification Lemma holds on `fit_axis`: the Gram matrix of the 
+difference rows does not depend on which element of the pair is designated as true, 
+hence the span of v1 is invariant. The 'orient' argument is used exclusively 
+for the permutation null baseline and the final orientation.
 """
 
 import torch
@@ -40,22 +43,22 @@ def ang_diff(a, b):
 
 
 def robust_ms(c):
-    """mediana e scala robusta (MAD per 1.4826), come in truth_probe."""
+    """median and robust scale (MAD per 1.4826), like in truth_probe."""
     med = c.median()
     scale = (1.4826 * (c - med).abs().median()).clamp_min(1e-8)
     return float(med), float(scale)
 
 
 def fit_axis(Hl, pidx, orient=None):
-    """Asse di verita' a un livello, dalla SVD delle differenze intra-coppia.
+    """Truth axis, from the SVD of the intra-pair differences.
 
     Hl    [N, d] stati a un livello
-    pidx  lista di (indice_vero, indice_falso)
-    orient  opzionale, +1 o -1 per coppia: scambia i due lati. Serve al null di
-            permutazione. Per il Lemma lo span di v1 non ne dipende.
+    pidx  list of (true_index, false_index)
+    orient  optional, +1 o -1 per pair: swap the two side. it used for permutation
+            null. By the lemma, the span of v1 does not depend on it.
 
-    Restituisce il dizionario dell'asse con v1, v2 e la calibrazione, nella
-    stessa forma che project_fields si aspetta.
+    Returns the axis dictionary containing v1, v2, and the calibration parameters, 
+    structured exactly as expected by project_fields.
     """
     if orient is None:
         orient = [1] * len(pidx)
@@ -94,15 +97,16 @@ def fit_axis(Hl, pidx, orient=None):
 
 
 def project_fields(Hl, ax):
-    """Le coordinate calibrate di uno stato rispetto a un asse.
+    """Calibrated coordinates of a state relative to an axis.
 
-    Re    la posizione sull'asse, l'unica coordinata che porta verita' secondo
-          i sette esperimenti di falsificazione
-    Im    la seconda direzione, varianza residua sulle coppie a polarita' unica
-    b     Re passato per una sigmoide
-    m     il modulo, cioe' l'energia
-    theta l'argomento, cioe' la fase
+    Re     position on the axis, the unique truth-bearing coordinate according 
+           to the seven falsification experiments
+    Im     the second direction, residual variance on fixed-polarity pairs
+    b      Re passed through a sigmoid function
+    m      magnitude, i.e., energy
+    theta  argument, i.e., phase
     """
+
     Hl = Hl.float()
     Re = (Hl @ ax["v1"] - ax["med1"]) / ax["s1"]
     Im = (Hl @ ax["v2"] - ax["med2"]) / ax["s2"]
@@ -115,16 +119,17 @@ def project_fields(Hl, ax):
 
 
 def axis_vector(ax):
-    """v1 unitario, per chi vuole solo la direzione."""
+        """Unit vector v1, for those who only need the direction."""
     return unit(ax["v1"])
 
 
 def cosine_matrix(axes):
-    """Matrice KxK dei coseni con SEGNO fra assi orientati ciascuno dentro la
-    propria categoria. Il segno e' informazione: negativo significa che la
-    direzione condivisa legge la verita' dell'altra categoria al contrario.
-    Ma dipende dall'orientamento di ENTRAMBE le categorie coinvolte: solo i
-    prodotti sui cicli chiusi sono invarianti (vedi stats.frustration)."""
+    """KxK SIGNED cosine matrix between oriented axes, each within its own category. 
+    The sign is information: negative means that the shared direction reads the 
+    truth of the other category in reverse. 
+    However, it depends on the orientation of BOTH categories involved: only the 
+    products over closed loops are invariant (see `stats.frustration`).
+    """
     A = torch.stack([unit(a["v1"] if isinstance(a, dict) else a) for a in axes], 0)
     return A @ A.T, A
 
@@ -161,9 +166,10 @@ def arrangement_by_layer(H_all, pidx, cat_pairs, layers=None, verbose=True):
 
 
 def subspace_fraction(D, A):
-    """Frazione della norma quadrata di ogni riga di D che cade nello span
-    delle righe di A. Il valore atteso a caso e' circa righe(A) / colonne(A):
-    va sempre riportato accanto, altrimenti il numero non si legge."""
+    """Fraction of the squared norm of each row in D that falls within the span 
+    of the rows of A. The expected random baseline value is approximately rows(A) / columns(A): 
+    this baseline must always be reported alongside the result, otherwise the number cannot be interpreted.
+    """
     Q, _ = torch.linalg.qr(A.T)
     n2 = D.pow(2).sum(1).clamp_min(1e-12)
     return (D @ Q).pow(2).sum(1) / n2
