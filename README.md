@@ -201,7 +201,7 @@ own provenance.
 ### Arrangement agreement, and the knowledge gate
 
 $$r = \mathrm{Pearson}\big(\mathcal{O}(M^{A}), \mathcal{O}(M^{B})\big),
-\qquad \hat p = \frac{1 + \#\{b : r_b \ge r\}}{B + 1}$$
+\qquad \hat p = \frac{1 + \lvert \{ b : r_b \ge r \} \rvert}{B + 1}$$
 
 ```python
 from truthprobe.stats import mantel, triple_mantel, frustration, restricted_law
