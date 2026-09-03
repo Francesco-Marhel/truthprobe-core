@@ -342,3 +342,5 @@ with both separating above 0.87.
 Code is MIT. The dictionary bundles in `data/` are CC BY 4.0, like the paper.
 The tools print matrices, margins and distances, and never a
 verdict: the reading belongs to the researcher.
+
+https://doi.org/10.5281/zenodo.22269436 
