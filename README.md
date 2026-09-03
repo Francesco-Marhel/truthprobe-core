@@ -2,10 +2,14 @@
 
 A measurement apparatus for the geometry of truth in language models.
 
-Companion library to *The Anatomy of a Truth Direction* (arXiv:2607.16741). The
-tools that produced the published numbers live in the paper's own repository,
-not here: this is the shared machinery underneath them, extracted so that a new
-experiment does not have to restate it.
+Companion library to *The Anatomy of a Truth Direction* (arXiv:2607.16741).
+The canonical scripts that produced Part I live in the paper's own repository.
+This one holds the shared machinery, the campaign that produced Parts II and III,
+and the dictionary bundles those numbers were read from.
+
+The canonical scripts predate the sentence convention used here: they build "prompt target" without the final period, and have no parameter to change it.
+Bundles from the two repositories are therefore not comparable.
+The bridge is measured: the global axes differ at cosine 0.474, while the arrangement between categories survives at Mantel +0.775.
 
 ---
 
@@ -51,19 +55,12 @@ the model **represents**. All three are required:
 
 ```bash
 pip install -e .
-python tests/test_regressione.py                    # internal consistency
-python tests/test_regressione.py --canonico <dir>   # + comparison with the canonical tools
+python scripts/campagna.py --model <hf-name-or-path> --stages behav,signal
 ```
 
 `torch` is the only hard dependency. `transformers` and `datasets` are the
 `[models]` extra, needed only when a model is loaded: the pure functions install
 and test without them.
-
-The regression suite has two modes. Without `--canonico` it checks internal
-consistency and mathematical identities. With it, pointed at a folder containing
-`truth_probe.py`, it additionally checks that this library lands on the **same
-numbers** as the code that produced the published results. The second is the
-stronger check and is worth running whenever the canonical tools are at hand.
 
 ---
 
@@ -78,8 +75,9 @@ truthprobe/     the library: functions, no scripts
   subspace.py     principal angles, spectral entropy, CKA
   hooks.py        architecture detection, additive decomposition, gates
   bundle.py       save and load with provenance
-tools/          scripts that use the library
-tests/          the regression suite
+tools/          exploratory scripts built on the library
+scripts/        the campaign that produced Parts II and III of the paper
+data/           the dictionary bundles, with their protocol metadata
 ```
 
 The line between the two folders: **if it decides what to measure it is a tool,
@@ -329,8 +327,7 @@ separate, and that is knowable before fitting anything.
 Established across families: attention propagates truth frames it did not write
 while the feed-forward opposes the frame of its moment; the post-peak erosion is
 carried by the value stream on five architectures; per-category axes form a
-signed arrangement that converges across model families and is gated by shared
-knowledge, quantified as classical attenuation.
+signed arrangement is largely shared across families, with a measurable family-specific component
 
 Measured boundaries: the arrangement is identifiable only where the eigengap is
 large; outside the peak the knowledge gate stops operating; on material without
@@ -342,5 +339,6 @@ with both separating above 0.87.
 
 ---
 
-License CC BY 4.0. The tools print matrices, margins and distances, and never a
+Code is MIT. The dictionary bundles in `data/` are CC BY 4.0, like the paper.
+The tools print matrices, margins and distances, and never a
 verdict: the reading belongs to the researcher.
