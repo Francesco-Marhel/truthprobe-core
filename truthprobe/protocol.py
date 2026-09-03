@@ -2,30 +2,39 @@
 """
 truthprobe.protocol
 
-Le convenzioni che DEVONO essere identiche in ogni strumento, raccolte in un
-oggetto solo che viaggia con i dati e finisce dentro ogni artefatto.
+The conventions that MUST be identical across every analytical tool, encapsulated 
+within a single object that travels with the data and is stored inside every artifact.
 
-PERCHE' NON SONO FLAG
-Durante lo sviluppo di questa serie due strumenti dello stesso progetto hanno
-costruito le frasi in modo diverso per mesi senza che nessuno se ne accorgesse:
-uno concatenava "prompt target." e l'altro "prompt target". Le due convenzioni
-producono assi con coseno +0.52, cioe' direzioni diverse, mentre l'arrangement
-sopravvive a Mantel +0.775. Nessuno strumento segnalava nulla, perche' la
-convenzione era un dettaglio interno a ciascun file.
 
-Un flag con un default non avrebbe impedito quella divergenza: avrebbe solo
-spostato il default in due posti. Qui invece il Protocol e' obbligatorio, viene
-scritto dentro ogni bundle, e il confronto fra due bundle lo verifica PRIMA di
-calcolare qualunque cosa. Una divergenza diventa un errore visibile invece che
-un numero sbagliato.
+WHY THESE ARE NOT FLAGS
 
-TRE CATEGORIE DI PARAMETRI, TRATTATE DIVERSAMENTE
-  protocollo   suffisso, dataset, revisione, seed, K, n, precisione, pooling.
-               Cambiano i numeri e devono essere condivise: stanno qui.
-  analisi      blocco, componente, permutazioni. Cambiano il risultato ma sono
-               proprie di ciascuna misura: stanno nei metadati dell'artefatto.
-  esecuzione   batch, dispositivo, cartella di uscita. Non cambiano i numeri:
-               restano flag liberi e non vengono registrati.
+During the development of this series, two tools from the same project independently 
+constructed sentences differently for months without anyone noticing: 
+one concatenated "prompt target." and the other "prompt target". These two conventions 
+produce axes with a cosine similarity of +0.52—meaning completely different directions—yet 
+the alignment survives a Mantel test at +0.775. No tool flagged any anomaly, 
+because the convention was treated as a minor internal detail within each individual file.
+
+A standard flag with a default value would not have prevented this divergence; 
+it would have merely shifted the default configuration across two places. Here, 
+the Protocol is strictly mandatory, is written into every bundle, and any comparison 
+between two bundles verifies it BEFORE computing anything. A divergence thus becomes 
+a highly visible error instead of a silently incorrect number.
+
+
+THREE CATEGORIES OF PARAMETERS, TREATED DIFFERENTLY
+
+  protocol     suffix, dataset, revision, seed, K, n, precision, pooling. 
+               These alter the numerical values and must be strictly shared: 
+               they reside here.
+               
+  analysis     block, component, permutations. These alter the results but 
+               are specific to each measurement run: they reside in the 
+               artifact's metadata.
+               
+  execution    batch, device, output_folder. These do not alter the numerical 
+               values: they remain free flags and are not logged.
+
 """
 
 from dataclasses import dataclass, asdict, field, replace
@@ -38,24 +47,27 @@ TRUTHFULQA_REV = "741b8276f2d1982aa3d5b832d3ee81ed3b896490"
 
 @dataclass(frozen=True)
 class Protocol:
-    """Le convenzioni di costruzione dei dati e di lettura degli stati.
+    """Data construction and state readout conventions.
 
-    suffix: cosa si attacca dopo il target.
-        "."  l'ultimo token e' identico nelle due frasi della coppia, quindi
-             l'identita' del token esce dalla misura e cio' che si legge e'
-             arrivato al punto attraverso l'attenzione. E' anche la condizione
-             che rende sensato il controllo "curva a 0.500 al livello 0".
-        ""   l'ultimo token e' la parola target, diversa fra vero e falso: la
-             misura include l'identita' del token. Legittimo ma e' un'altra
-             domanda, e i due casi NON sono confrontabili fra loro.
+    suffix: what is appended after the target.
+        "."   The final token is identical in both sentences of the pair, 
+              hence the token's identity cancels out of the measurement. 
+              What is read has reached that point through the attention mechanism. 
+              This is also the condition that gives meaning to the 
+              "curve at 0.500 at layer 0" check.
+        ""    The final token is the target word itself, which differs between 
+              the true and false sentence: the measurement therefore includes 
+              the token's own identity. Legitimate, but it answers a completely 
+              different question, and the two cases are NOT comparable.
 
-    join: come si uniscono prompt e target.
-        "space"  prompt.strip() + " " + target.strip(), esplicito nel codice
-        "raw"    prompt.strip() + target, cioe' lo spazio arriva dal dataset.
-                 E' la convenzione storica di categories.py e crea_dizionario.py
-                 e si conserva solo per riprodurre bundle vecchi: dipende da una
-                 proprieta' del dataset invece che dal codice.
+    join: how prompt and target are combined.
+        "space" prompt.strip() + " " + target.strip(), explicit in the codebase.
+        "raw"   prompt.strip() + target, meaning the space comes directly from the dataset. 
+                This is the historical convention of `categories.py` and `crea_dizionario.py`. 
+                It is preserved exclusively to reproduce legacy bundles: it depends 
+                on a property of the dataset rather than the codebase itself.
     """
+
     suffix: str = "."
     join: str = "space"
     pool: str = "last"
@@ -70,16 +82,16 @@ class Protocol:
 
     def __post_init__(self):
         if self.join not in ("space", "raw"):
-            raise ValueError("join deve essere 'space' o 'raw', non %r" % self.join)
+            raise ValueError("join must be 'space' or 'raw', not %r" % self.join)
         if self.pool not in ("last", "mean"):
-            raise ValueError("pool deve essere 'last' o 'mean', non %r" % self.pool)
+            raise ValueError("pool must be 'last' or 'mean', not %r" % self.pool)
         if self.dtype not in ("float32", "bfloat16", "float16"):
-            raise ValueError("dtype non riconosciuto: %r" % self.dtype)
+            raise ValueError("unrecognized dtype: %r" % self.dtype)
 
     # ---- costruzione delle frasi: l'UNICO posto in tutta la libreria ----
     def sentence(self, prompt, target):
-        """L'unica funzione che concatena prompt e target. Se un giorno serve
-        cambiare, si cambia qui e cambia ovunque."""
+        """The single function that concatenates prompt and target. If a change is 
+    needed in the future, updating it here changes it everywhere."""
         p = str(prompt).strip()
         if self.join == "space":
             return p + " " + str(target).strip() + self.suffix
@@ -87,29 +99,30 @@ class Protocol:
 
     # ---- identita' e confronto ----
     def key(self):
-        """I campi che rendono due artefatti confrontabili. 'notes' e i campi
-        di dimensione non entrano: due bundle con K diverso restano
-        confrontabili sulle categorie condivise, due con suffix diverso no."""
+    """The fields that determine whether two artifacts are comparable. 'notes' and 
+    dimension fields are excluded: two bundles with different K remain comparable 
+    on shared categories, whereas two with different suffixes do not.
+    """
         return (self.suffix, self.join, self.pool, self.dataset, self.revision)
 
     def compatible_with(self, other):
         return self.key() == other.key()
 
     def diff(self, other):
-        """I campi che differiscono, per messaggi d'errore leggibili."""
+            """The fields that differ, formatted for readable error messages."""
         a, b = asdict(self), asdict(other)
         return {k: (a[k], b[k]) for k in a if a[k] != b[k]}
 
-    def require_compatible(self, other, what="confronto"):
+    def require_compatible(self, other, what="comparison"):
         if not self.compatible_with(other):
             d = self.diff(other)
-            righe = "\n".join("    %-12s %r  contro  %r" % (k, v[0], v[1])
+            righe = "\n".join("    %-12s %r  versus  %r" % (k, v[0], v[1])
                               for k, v in d.items())
             raise ValueError(
-                "%s fra protocolli incompatibili:\n%s\n"
-                "  I due artefatti non misurano lo stesso oggetto. Rigenerane uno "
-                "con lo stesso protocollo, oppure dichiara esplicitamente che il "
-                "confronto e' fra convenzioni diverse." % (what, righe))
+                "%s between incompatible protocol:\n%s\n"
+                "  Two artifacts do not measure the same object.. recreates with "
+                "same protocol, or declare explicity that the comparison is between "
+                "different conventions." % (what, righe))
 
     def to_dict(self):
         return asdict(self)
@@ -122,11 +135,11 @@ class Protocol:
         return Protocol(**{k: v for k, v in d.items() if k in campi})
 
     def with_(self, **kw):
-        """Copia con qualche campo cambiato (Protocol e' immutabile)."""
+        """Copy with a few fields changed (Protocol e' immutabile)."""
         return replace(self, **kw)
 
     def label(self):
-        """Etichetta corta per nomi di file, che rende visibile la convenzione."""
+   """Short string representation for filenames that exposes the chosen convention."""
         parti = ["s%d" % self.seed]
         if self.k_relations:
             parti.append("K%d" % self.k_relations)
