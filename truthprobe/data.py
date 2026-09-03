@@ -2,32 +2,40 @@
 """
 truthprobe.data
 
-Il caricamento delle coppie. Ogni frase passa da Protocol.sentence, che e'
-l'unico posto in tutta la libreria dove prompt e target vengono concatenati.
+Pair loading mechanism. Every sentence passes through Protocol.sentence, which is 
+the single, centralized location in the entire library where prompts and targets 
+are concatenated.
 
-E' il modulo che chiude il buco trovato in questa serie. Prima ogni strumento
-costruiva le frasi per conto suo, e due di loro sono divergiuti per mesi senza
-che nessuno se ne accorgesse. Qui la costruzione non e' accessibile: si chiede
-un PairSet a partire da un Protocol, e il PairSet porta il Protocol con se'.
+This module closes the loophole discovered in this series. Previously, each 
+analytical tool constructed sentences independently, causing two of them to 
+diverge for months without anyone noticing. Here, direct text construction is 
+not exposed: an external tool must request a PairSet using a Protocol, 
+and the PairSet carries that Protocol along with it.
 
-DUE OGGETTI
 
-  Pair      una coppia minimale: prompt, target vero, target falso, e la
-            categoria se il materiale ne ha una.
-  PairSet   un insieme di coppie con il suo Protocol, gli indici delle frasi
-            e la mappa categoria -> coppie. E' quello che gli strumenti
-            ricevono, e da cui non si puo' ricostruire una frase diversamente.
+TWO OBJECTS
 
-DUE MODI DI COSTRUIRE IL FALSO, DICHIARATI
-  esplicito  il dataset fornisce target_false (CounterFact, o un file con
-             false_targets). E' il caso normale.
-  scambio    il falso viene dal target di un altro item della stessa
-             relazione. Serve ai file di fatti che non portano il falso, ed e'
-             deterministico: si scorrono gli item della relazione in ordine di
-             comparsa, a partire dal successivo e ciclicamente, e si prende il
-             primo target diverso. Un item la cui relazione non offre
-             alternative viene saltato e il motivo viene registrato.
+  Pair       A minimal pair: prompt, true target, false target, and the category 
+             if the underlying material provides one.
+  PairSet    A collection of pairs packaged with their Protocol, the sentence indices, 
+             and the category -> pairs mapping. This is what down-stream tools 
+             receive, and it guarantees that a sentence cannot be reconstructed 
+             in an inconsistent format.
+
+
+TWO MODES FOR INFERRING FALSE TARGETS, EXPLICITLY DECLARED
+
+  explicit   The dataset natively provides a 'target_false' (e.g., CounterFact, 
+             or a custom file containing false_targets). This is the default case.
+  swap       The false target is pulled from the true target of another item belonging 
+             to the exact same relation. This is necessary for fact files that lack 
+             explicit false targets. It is strictly deterministic: the items within 
+             the relation are scanned in their order of appearance, starting from 
+             the subsequent item and wrapping around cyclically, selecting the first 
+             distinct target encountered. An item whose relation offers no valid 
+             alternative target is skipped, and the reason is logged.
 """
+
 
 import json
 import os
@@ -45,18 +53,17 @@ class Pair:
     target_false: str
     category: Optional[str] = None
     ident: Optional[str] = None
-    origin: str = "esplicito"          # "esplicito" oppure "scambio"
-
+    origin: str = "explicit"          # "explicit" or "swap"
 
 @dataclass
 class PairSet:
-    """Coppie pronte, con il protocollo che le ha costruite.
+        """Ready pairs, packaged with the protocol that generated them.
 
-    items    le frasi, in ordine: per ogni coppia prima il vero poi il falso
-    pidx     gli indici (vero, falso) dentro items
-    pairs    gli oggetti Pair, allineati a pidx
-    protocol il Protocol usato, che viaggia con i dati e finisce nei bundle
-    skipped  gli item scartati, con il motivo, per non perderli in silenzio
+    items     the sentences in order: for each pair, the true one comes first, then the false one
+    pidx      the indices (true, false) pointing into items
+    pairs     the Pair objects, aligned with pidx
+    protocol  the Protocol instance used, which travels with the data and ends up in the bundles
+    skipped   the discarded items along with their reason, to avoid losing them silently
     """
     items: List[str]
     pidx: List[Tuple[int, int]]
@@ -76,7 +83,7 @@ class PairSet:
         return vis
 
     def by_category(self):
-        """categoria -> lista di (indice_vero, indice_falso)"""
+        """category -> list of (true_index, false_index)"""
         out = {}
         for k, p in enumerate(self.pairs):
             if p.category:
@@ -84,7 +91,7 @@ class PairSet:
         return out
 
     def index_of_category(self):
-        """categoria -> posizioni nella lista delle coppie"""
+        """categori -> posizioni nella lista delle coppie"""
         out = {}
         for k, p in enumerate(self.pairs):
             if p.category:
@@ -92,8 +99,8 @@ class PairSet:
         return out
 
     def subset(self, keep):
-        """Nuovo PairSet con le sole coppie indicate. Gli indici vengono
-        rinumerati, quindi resta coerente."""
+        """New PairSet with only the indicated pairs. The indices are
+        renumbered, so it remains coherent."""
         items, pidx, pairs = [], [], []
         for k in keep:
             p = self.pairs[k]
@@ -138,7 +145,7 @@ def _open_dataset(protocol, local_file=None):
         fmt = {"parquet": "parquet", "json": "json", "jsonl": "json",
                "csv": "csv"}.get(ext)
         if fmt is None:
-            raise ValueError("estensione locale non supportata: %s" % ext)
+            raise ValueError("local extension not supported: %s" % ext)
         return load_dataset(fmt, data_files=local_file, split="train")
     from datasets import load_dataset
     return load_dataset(protocol.dataset, split="train", revision=protocol.revision)
@@ -147,7 +154,7 @@ def _open_dataset(protocol, local_file=None):
 def _raw_rows(protocol, local_file=None, verbose=True):
     ds = _open_dataset(protocol, local_file)
     if verbose:
-        print("  [provenienza] %s @ %s  (%d righe)"
+        print("  [provenance] %s @ %s  (%d lines)"
               % (protocol.dataset, (protocol.revision or "latest")[:12], len(ds)))
     out = []
     for ex in ds:
@@ -164,8 +171,9 @@ def _raw_rows(protocol, local_file=None, verbose=True):
 
 
 def counterfact_flat(protocol=CANONICAL, max_pairs=250, local_file=None, verbose=True):
-    """Coppie pescate a caso su tutto CounterFact, senza raggruppare per
-    relazione. E' il campionamento del protocollo canonico di truth_probe."""
+    """Randomly sampled pairs across all CounterFact, without grouping by relation. 
+    This represents the sampling of the canonical truth_probe protocol.
+    """
     rows = _raw_rows(protocol, local_file, verbose)
     idx = list(range(len(rows)))
     random.Random(protocol.seed).shuffle(idx)
@@ -180,16 +188,17 @@ def counterfact_flat(protocol=CANONICAL, max_pairs=250, local_file=None, verbose
         if len(pairs) >= max_pairs:
             break
     if not pairs:
-        raise RuntimeError("nessuna coppia costruita: lo schema del dataset e' cambiato?")
+        raise RuntimeError("No pairs generated: has the dataset schema changed?")
     return build(pairs, protocol)
 
 
 def counterfact_by_relation(protocol=CANONICAL, k=33, n_per=60,
                             whitelist=None, local_file=None, verbose=True):
-    """Coppie raggruppate per relazione Wikidata: le k relazioni con piu'
-    coppie uniche, n_per ciascuna. E' il campionamento della famiglia
-    dizionari. La chiave di unicita' e' (prompt, target vero), come nel
-    codice canonico."""
+  """Pairs grouped by Wikidata relation: the K relations with the highest 
+    number of unique pairs, selecting n_per pairs for each. This represents the sampling 
+    of the dictionary family. The uniqueness key is (prompt, true_target), matching 
+    the canonical codebase.
+    """
     rows = _raw_rows(protocol, local_file, verbose)
     by_rel = {}
     for rid, prompt, tt, tf in rows:
@@ -201,7 +210,7 @@ def counterfact_by_relation(protocol=CANONICAL, k=33, n_per=60,
         top = [r for r in whitelist if r in by_rel]
         mancanti = [r for r in whitelist if r not in by_rel]
         if mancanti and verbose:
-            print("  [avviso] relazioni richieste e assenti: %s" % mancanti)
+            print("  [warning] required relations missing: %s" % mancanti)
     else:
         top = sorted(by_rel, key=lambda r: len(by_rel[r]), reverse=True)[:k]
 
@@ -211,7 +220,7 @@ def counterfact_by_relation(protocol=CANONICAL, k=33, n_per=60,
         random.Random(protocol.seed).shuffle(rws)
         rws = rws[:n_per]
         if verbose:
-            print("    %-7s %3d coppie" % (rid, len(rws)))
+            print("    %-7s %3d pairs" % (rid, len(rws)))
         for prompt, tt, tf in rws:
             pairs.append(Pair(prompt, tt, tf, category=rid))
     p = protocol.with_(k_relations=len(top), pairs_per_relation=n_per)
@@ -219,11 +228,12 @@ def counterfact_by_relation(protocol=CANONICAL, k=33, n_per=60,
 
 
 def from_json(path, protocol=CANONICAL, verbose=True):
-    """Un file di fatti nello schema del progetto: lista di oggetti con
-    prompts, targets, e facoltativi false_targets, relation_id, id.
+    """A fact file matching the project schema: a list of objects containing 
+    'prompts', 'targets', and optional 'false_targets', 'relation_id', 'id'.
 
-    Se false_targets manca, il falso viene per scambio dentro la relazione,
-    con la regola dichiarata in cima al modulo."""
+    If 'false_targets' is missing, the false target is inferred by permutation 
+    within the relation, following the rule declared at the top of the module.
+    """
     with open(path, "r", encoding="utf-8") as fh:
         data = json.load(fh)
     if isinstance(data, dict):
@@ -232,10 +242,10 @@ def from_json(path, protocol=CANONICAL, verbose=True):
                 data = v
                 break
     if not isinstance(data, list):
-        raise ValueError("il file non contiene una lista di item: %s" % path)
+        raise ValueError("the file does not contain a list of items: %s" % path)
 
     rows = [el for el in data if isinstance(el, dict)]
-    scartati = [("(elemento non valido)", "non e' un oggetto")] * (len(data) - len(rows))
+    scartati = [("(invalid element)", "it is not an object")] * (len(data) - len(rows))
 
     def first(it, key):
         v = it.get(key)
@@ -257,24 +267,24 @@ def from_json(path, protocol=CANONICAL, verbose=True):
         ident = str(it.get("id", "?"))
         prompt, tt = first(it, "prompts"), first(it, "targets")
         if not prompt or not tt:
-            scartati.append((ident, "prompt o target vero mancante"))
+            scartati.append((ident, "missing prompt or true target"))
             continue
         tf = first(it, "false_targets")
-        origin = "esplicito"
+        origin = "explicit"
         if not tf:
             rid = it.get("relation_id")
             grp = by_rel.get(rid, []) if rid else []
             if len(grp) < 2:
-                scartati.append((ident, "nessun false_target e nessuna alternativa"))
+                scartati.append((ident, "no false_target and no alternative"))
                 continue
             k = grp.index(pos)
             for step in range(1, len(grp)):
                 cand = first(rows[grp[(k + step) % len(grp)]], "targets")
                 if cand and cand.strip().lower() != tt.strip().lower():
-                    tf, origin = cand, "scambio"
+                    tf, origin = cand, "swap"
                     break
             if not tf:
-                scartati.append((ident, "nessun target diverso nella relazione"))
+                scartati.append((ident, "no distinct target within the relation"))
                 continue
         pairs.append(Pair(prompt, tt, tf, category=it.get("relation_id"),
                           ident=ident, origin=origin))
