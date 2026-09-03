@@ -111,6 +111,9 @@ module (principal angles, spectral entropy, effective rank, CKA);
 `protocol.py`, `data.py`, `bundle.py`. Standard mathematics or infrastructure,
 validated on planted ground truth, but reproducing nothing previously published.
 
+Docstrings and inline comments are in Italian. function names, the README and
+the paper are in English. Translation of the public docstrings is in progress.
+
 ---
 
 ## The core, with formulas
