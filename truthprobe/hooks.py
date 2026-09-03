@@ -2,69 +2,70 @@
 """
 truthprobe.hooks
 
-La scomposizione additiva del blocco, e il cancello che dice quando non e'
-valida.
+Additive block decomposition and the gating mechanism that identifies invalid states.
 
-IL PRINCIPIO
-Tutto il lavoro sulla meccanica poggia su una sola identita':
+THE PRINCIPLE
+All mechanistic analysis relies on a single fundamental identity:
 
     h[b+1] = h[b] + a[b] + f[b]
 
-dove a[b] e f[b] sono i vettori che attenzione e FFN AGGIUNGONO al flusso
-residuo. Se quell'identita' non tiene, ogni numero a valle e' privo di
-significato. Per questo il cancello non e' un avviso: e' una condizione di
-esecuzione, e chi lo ignora produce numeri sbagliati senza accorgersene.
+where a[b] and f[b] are the vectors that attention and FFN ADD to the residual
+stream. If this identity does not hold, every downstream numerical value is 
+meaningless. For this reason, the gate is not a mere warning: it is an execution 
+condition, and ignoring it leads to silently producing incorrect numbers.
 
-Il cancello usa la MEDIANA dell'errore relativo, non il massimo: dove un blocco
-aggiunge quasi nulla il denominatore e' minuscolo e il rapporto esplode, quindi
-il massimo e' fragile mentre la mediana riporta il caso tipico.
+The gate uses the MEDIAN relative error, not the maximum: when a block adds 
+almost nothing, the denominator becomes tiny and the ratio explodes. Therefore, 
+the maximum is fragile, whereas the median accurately reports the typical case.
 
-E richiede float32. In bfloat16 l'identita' fallisce per cancellazione
-catastrofica: si sottraggono stati grandi per ottenere delta piccoli, e la
-precisione ridotta si mangia il risultato.
+It strictly requires float32 precision. In bfloat16, the identity fails due to 
+catastrophic cancellation: large states are subtracted to obtain small deltas, 
+and the reduced precision eats away the actual result.
 
-LE VARIANTI DI ARCHITETTURA, E QUALI ROMPONO COSA
 
-  pre-norm            Llama, Qwen, Mistral. Il modulo scrive direttamente nel
-                      residuo. Si aggancia l'uscita del modulo.
+ARCHITECTURAL VARIANTS: WHAT THEY BREAK AND HOW
 
-  sandwich norm       Gemma-2 e Gemma-3. Il vettore che entra nel residuo e'
-                      l'uscita del modulo passata per una post-norma. Si
-                      aggancia la POST-NORMA. Rilevamento per presenza
-                      congiunta delle due norme del feedforward, mai per il
-                      nome post_attention_layernorm, che su Llama e Qwen esiste
-                      ma e' la PRE-norma dell'MLP: e' una trappola di
-                      denominazione che fa fallire il cancello a 0.94.
+  pre-norm            Llama, Qwen, Mistral. The module writes directly into the
+                      residual stream. The hook is attached to the module output.
 
-  bias su o_proj      GPT-2 e altri. La somma dei contributi per testa NON e'
-                      l'uscita di o_proj: manca il bias, che e' un termine
-                      unico e non attribuibile a nessuna testa. Viene riportato
-                      a parte, come il termine di norma nello split sandwich.
-                      Nelle differenze intra-coppia si cancella, ma il cancello
-                      lo deve sapere.
+  sandwich norm       Gemma-2 and Gemma-3. The vector entering the residual stream 
+                      is the module output passed through a post-normalization layer. 
+                      The hook must capture the POST-NORM. Detection relies on the 
+                      joint presence of both feedforward norms, never on names like 
+                      'post_attention_layernorm'. On Llama and Qwen, that name exists 
+                      but represents the PRE-norm of the MLP: a naming trap that 
+                      causes the gate to fail at 0.94.
 
-  blocchi paralleli   GPT-J, Falcon, PaLM. Attenzione e FFN leggono ENTRAMBI lo
-                      stesso stato normalizzato invece che in sequenza.
-                      L'identita' additiva regge, quindi la scomposizione e'
-                      valida, ma NON esiste uno stato pre-FFN: il controllo di
-                      provenienza con il pre frame li' misura un'altra cosa e
-                      va reinterpretato.
+  bias on o_proj      GPT-2 and others. The sum of per-head contributions is NOT 
+                      the output of o_proj: the bias is missing, which is a single 
+                      term that cannot be attributed to any individual head. It is 
+                      tracked separately, much like the norm term in the sandwich split. 
+                      It cancels out in intra-pair differences, but the gate must 
+                      be aware of it.
 
-  post-norm vero      La norma e' applicata alla SOMMA: h = norm(h + attn(h)).
-                      Il flusso residuo non e' additivo e la scomposizione non
-                      esiste. Va rifiutata, non aggiustata. Il cancello la
-                      intercetta comunque.
+  parallel blocks     GPT-J, Falcon, PaLM. Attention and FFN BOTH read the exact 
+                      same normalized state concurrently instead of sequentially. 
+                      The additive identity still holds, meaning the decomposition 
+                      remains valid, but a pre-FFN state DOES NOT exist: provenance 
+                      checks with the pre-frame there measure a different property 
+                      and must be re-interpreted.
 
-  MoE                 Il blocco resta additivo, quindi la scomposizione a
-                      livello di blocco vale senza modifiche. Cambia DENTRO
-                      l'FFN, che diventa una somma pesata di esperti scelti da
-                      un router: la scomposizione per esperto e' un oggetto
-                      nuovo, non una variante di questa.
+  true post-norm      Normalization is applied to the SUM: h = norm(h + attn(h)). 
+                      The residual stream is non-additive, and decomposition 
+                      does not exist. This must be rejected, not patched. The gate 
+                      will intercept it regardless.
 
-  head_dim diverso    Su Gemma head_dim per n_heads non fa hidden_size. La
-                      dimensione della testa si ricava sempre da
-                      o_proj.in_features, mai dividendo hidden_size.
+  MoE                 The block remains additive, so block-level decomposition 
+                      holds without modifications. The variance occurs INSIDE the 
+                      FFN, which becomes a weighted sum of experts selected by a 
+                      router: per-expert decomposition is a novel object entirely, 
+                      not a variant of this module.
+
+  deviant head_dim    On Gemma, head_dim multiplied by n_heads does not equal 
+                      hidden_size. The head dimension must always be inferred 
+                      from o_proj.in_features, never by dividing hidden_size.
 """
+
 
 from dataclasses import dataclass, asdict
 from typing import Optional, List
@@ -77,30 +78,32 @@ import torch
 # =====================================================================
 @dataclass
 class Wiring:
-    """DOVE guardare dentro un blocco. Separato da COSA fare con quello che si
-    cattura, che e' il resto della libreria e non cambia mai.
+        """
+    WHERE to look inside a block. Completely decoupled from WHAT to do with what 
+    is captured, which is handled by the rest of the library and never changes.
 
-    Serve perche' i modelli chiamano le stesse cose con nomi diversi, e nessun
-    rilevamento automatico puo' coprire un'architettura che non esisteva quando
-    la libreria e' stata scritta. Invece di aggiungere un caso alla libreria
-    ogni volta, si passa il cablaggio dall'esterno:
+    This is necessary because models call the same components by different names, 
+    and no automatic detection can cover an architecture that did not exist when 
+    the library was written. Instead of updating the library for every new case, 
+    the wiring is passed from the outside:
 
         w = Wiring(
-            attn_write = lambda L: L.post_attention_layernorm,  # cio' che entra nel residuo
+            attn_write = lambda L: L.post_attention_layernorm,  # what enters the residual stream
             ffn_write  = lambda L: L.post_feedforward_layernorm,
             out_proj   = lambda L: L.self_attn.o_proj,
-            pre_norm_in= lambda L: L.post_attention_layernorm,  # solo se sandwich
+            pre_norm_in= lambda L: L.post_attention_layernorm,  # sandwich norm only
         )
         arch = describe(model, wiring=w)
 
-    Ogni campo e' una funzione che riceve il blocco e restituisce il modulo da
-    agganciare. Quello che non serve resta None.
+    Each field is a function that receives the block and returns the specific module 
+    to be hooked. Anything not required remains None.
 
-    Il cancello di identita' verifica comunque il risultato: se il cablaggio e'
-    sbagliato, l'errore relativo esplode e la libreria si ferma invece di
-    produrre numeri privi di significato. Per questo passare il cablaggio a mano
-    non e' pericoloso: e' una proposta che viene verificata.
+    The identity gate verifies the output regardless: if the wiring is incorrect, 
+    the relative error explodes and execution halts instead of silently producing 
+    meaningless numbers. Because of this, manual wiring is entirely safe: it is 
+    treated as a proposal that gets verified.
     """
+
     attn_write: Optional[object] = None    # modulo la cui uscita entra nel residuo
     ffn_write: Optional[object] = None
     out_proj: Optional[object] = None      # per la scomposizione per testa
@@ -142,32 +145,32 @@ class Architecture:
 
     def to_dict(self):
         d = asdict(self)
-        d["wiring"] = ("esplicito: " + (self.wiring.notes or "fornito dall'utente")
-                       if self.wiring else "rilevato automaticamente")
+        d["wiring"] = ("explicit: " + (self.wiring.notes or "provided by the user")
+                       if self.wiring else "automatically detected")
         return d
 
     def summary(self):
         r = ["%s: %d blocchi, d=%d, %d teste da %d"
              % (self.family, self.n_blocks, self.d_model, self.n_heads, self.head_dim)]
         if self.residual_multiplier != 1.0:
-            r.append("moltiplicatore residuo %.4f applicato ai contributi"
+            r.append("residual multiplier %.4f applied to contributions"
                      % self.residual_multiplier)
         if self.sandwich:
-            r.append("norme in uscita (%s): si aggancia la post-norma, "
-                     "guadagno %s" % (self.norm_style,
+            r.append("output norms (%s): need to hook post-norma, "
+                     "gain %s" % (self.norm_style,
                                       "(1+w)" if self.unit_offset else "w"))
         if self.o_proj_bias:
             r.append("o_proj ha bias: la somma per testa lo esclude, riportato a parte")
         if self.parallel:
-            r.append("blocchi paralleli: attenzione e FFN leggono lo STESSO "
-                     "stato e scrivono insieme. Non esiste uno stato pre-FFN, e "
-                     "l'FFN di un blocco non vede l'attenzione del suo blocco")
+            r.append("parallel blocks: attention and FFN read the same "
+                     "state and write Together. There is no pre-FFN state, and "
+                     "FFN does not see the attention of its own block.")
         if self.moe:
-            r.append("MoE con %s esperti, %s attivi per token: il blocco resta "
-                     "additivo, l'FFN no"
+            r.append("MoE cwith %s experts, %s active per token: the block remain"
+                     "additive, FFN no"
                      % (self.n_experts or "?", self.top_k or "?"))
         if self.wiring:
-            r.append("cablaggio esplicito%s"
+            r.append("explicit wiring%s"
                      % ((": " + self.wiring.notes) if self.wiring.notes else ""))
         for n in (self.notes or []):
             r.append(n)
@@ -180,7 +183,7 @@ def _layers(model):
         obj = getattr(inner, attr, None)
         if obj is not None and hasattr(obj, "__len__") and len(obj) > 0:
             return obj
-    raise RuntimeError("non trovo i blocchi del decoder in questo modello")
+    raise RuntimeError("not find the decoder blocks on this model.")
 
 
 def _attn(layer):
@@ -188,7 +191,7 @@ def _attn(layer):
         m = getattr(layer, attr, None)
         if m is not None:
             return m
-    raise RuntimeError("non trovo il modulo di attenzione nel blocco")
+    raise RuntimeError("not find the attention-module in the block.")
 
 
 def _out_proj(attn):
@@ -196,7 +199,7 @@ def _out_proj(attn):
         m = getattr(attn, attr, None)
         if m is not None and hasattr(m, "weight"):
             return m
-    raise RuntimeError("non trovo la proiezione di uscita dell'attenzione")
+    raise RuntimeError("not find the attention output projection.")
 
 
 def _mlp(layer):
@@ -204,12 +207,12 @@ def _mlp(layer):
         m = getattr(layer, attr, None)
         if m is not None:
             return m
-    raise RuntimeError("non trovo l'MLP nel blocco")
+    raise RuntimeError("not found MLP into the block")
 
 
 def describe(model, wiring=None):
-    """Rileva la variante di architettura. Il rilevamento e' esplicito e
-    conservativo: quello che non riconosce lo dichiara invece di indovinare."""
+"""Detects the architectural variant. Detection is explicit and conservative: 
+    what it does not recognize, it declares instead of guessing."""
     layers = _layers(model)
     layer = layers[0]
     cfg = model.config
@@ -223,8 +226,8 @@ def describe(model, wiring=None):
     in_f = getattr(op, "in_features", None) or op.weight.shape[1]
     head_dim = in_f // n_heads
     if head_dim * n_heads != d_model:
-        notes.append("head_dim per n_heads (%d) non fa d_model (%d): normale su "
-                     "Gemma, la dimensione viene da o_proj" % (head_dim * n_heads, d_model))
+        notes.append("head_dim per n_heads (%d) does not equal d_model (%d): normal on "
+                     "Gemma, the dimension comes from o_proj" % (head_dim * n_heads, d_model))
 
     # QUALE modulo scrive nel residuo. La domanda non e' se il blocco abbia
     # norme prima, ma se ne abbia dopo: dove esiste una post-norma dell'FFN, il
@@ -238,10 +241,10 @@ def describe(model, wiring=None):
         norm_style = "sandwich"
     elif post_ff:
         norm_style = "post"
-        notes.append("norme solo in uscita (stile OLMo 2): le due post-norme "
-                     "scrivono nel residuo e l'FFN legge il residuo grezzo. "
-                     "L'aggancio e' quello sandwich, il pre frame no: qui non "
-                     "esiste uno stato normalizzato in ingresso all'FFN")
+        notes.append("output-only norms (OLMo-2 style): the two post-norm "
+                     "write into the residual stream and the FFN reads the raw residual. "
+                     "The hook point is the sandwich one, but the pre-frame is not: here "
+                     "there is NO normalized state entering into the FFN")
     else:
         norm_style = "pre"
 
@@ -258,28 +261,28 @@ def describe(model, wiring=None):
     # esiste solo in alcune famiglie e va letto dal config.
     rmul = float(getattr(cfg, "residual_multiplier", 1.0) or 1.0)
     if rmul != 1.0:
-        notes.append("moltiplicatore residuo %.4f: i contributi vengono scalati "
-                     "prima di entrare nel residuo, e la libreria lo applica "
-                     "ai vettori restituiti" % rmul)
+        notes.append("residual multiplier %.4f: contribution are scaled "
+                     "before entering the residual stream, and the library applies "
+                     "this scaling to the returned vectors" % rmul)
 
     nrm = getattr(layer, "post_attention_layernorm", None)
     unit_offset = nrm is not None and "gemma" in type(nrm).__name__.lower()
     if sandwich and not unit_offset:
-        notes.append("la post-norma moltiplica per w, non per (1+w)")
+        notes.append("la post-norma multiply by W, not by (1+w)")
 
     moe = any(k in type(mlp).__name__.lower() for k in ("moe", "sparse", "expert"))
     packed = getattr(mlp, "experts", None)
     if packed is not None and hasattr(packed, "gate_up_proj"):
         moe = True
-        notes.append("esperti impacchettati come tensori 3D, non come moduli: "
-                     "la scomposizione per esperto e' analitica, come per le teste")
+        notes.append("experts packaged as 3D tensors, not as modules: "
+                     "The per-expert decomposition is analytical, just like the per-head decomposition.")
     n_exp = getattr(cfg, "num_local_experts", None) or getattr(cfg, "num_experts", None)
     top_k = (getattr(cfg, "num_experts_per_tok", None)
              or getattr(cfg, "moe_top_k", None)
              or getattr(cfg, "num_selected_experts", None))
     if moe and not (packed is not None and hasattr(packed, "gate_up_proj")):
-        notes.append("esperti come moduli: la scomposizione per esperto si fa "
-                     "con hook, uno per esperto")
+        notes.append("expert like modules: the decomposition per expert it done "
+                     "with hook, 1 per expert")
 
     # Alcune famiglie il parallelismo lo hanno nel codice del blocco ma NON
     # nel config: Phi lo scrive a mano dentro PhiDecoderLayer.forward come
@@ -292,11 +295,11 @@ def describe(model, wiring=None):
                     or getattr(cfg, "use_parallel_residual", False)
                     or getattr(cfg, "model_type", "") in MODELLI_PARALLELI)
     if parallel:
-        notes.append("con blocchi paralleli il pre frame non e' lo stato pre-FFN")
+        notes.append("with parallel blocks the pre frame its not pre-FFN state")
 
     fam = getattr(cfg, "model_type", type(model).__name__)
     if wiring is not None:
-        notes.append("il cablaggio esplicito ha la precedenza sul rilevamento")
+        notes.append("Explicit wiring takes priority over detection.")
     return Architecture(family=fam, n_blocks=len(layers), d_model=d_model,
                         n_heads=n_heads, head_dim=head_dim, sandwich=sandwich,
                         o_proj_bias=(getattr(op, "bias", None) is not None),
@@ -381,21 +384,21 @@ def _grab(buf, key):
 
 
 class BlockCapture:
-    """Cattura, per un blocco, i vettori che attenzione e FFN aggiungono al
-    residuo, e la scomposizione per testa del contributo dell'attenzione.
+    """
+    Captures, for a given block, the vectors added by attention and FFN to the 
+    residual stream, along with the per-head decomposition of the attention contribution.
 
-    Usare come contesto:
+    Use as a context manager:
 
         with BlockCapture(model, arch, block) as cap:
             out = model(**enc, output_hidden_states=True)
             a, f = cap.attn(), cap.ffn()
-            per_head = cap.heads()          # [B, nH, d]
+            per_head = cap.heads()         # [B, nH, d]
 
-    Tutte le catture avvengono nella stessa passata in avanti: la
-    scomposizione per testa non costa una passata in piu', perche' il modello
-    calcola comunque le uscite delle teste e qui si evita solo di buttarle.
+    All extractions occur during the same forward pass: the per-head decomposition 
+    does not require an additional pass, since the model computes the head outputs 
+    anyway, and this context manager simply prevents them from being discarded.
     """
-
     def __init__(self, model, arch, block, position=-1):
         self.model, self.arch, self.block, self.pos = model, arch, block, position
         layers = _layers(model)
@@ -483,12 +486,14 @@ class BlockCapture:
         return False
 
     def _w(self, module, name, attr="weight"):
-        """Un peso del blocco, su CPU e in float32, anche se e' offloadato.
+    """A block weight, forced onto the CPU and cast to float32, even if it is offloaded.
 
-        Unico punto in cui la libreria legge un parametro. Se il tensore e' un
-        segnaposto si tenta la mappa di accelerate; se non c'e' nemmeno quella
-        si alza l'errore invece di restituire zeri, che passerebbero per una
-        misura legittima."""
+    This is the only point where the library directly reads a model parameter. If the 
+    tensor is a placeholder, it attempts to use the weight map from `accelerate`; if 
+    even that map is missing, it explicitly raises an error instead of returning zeros, 
+    which would otherwise masquerade as a legitimate measurement.
+    """
+
         t = getattr(module, attr, None)
         if t is None:
             return None
@@ -503,13 +508,13 @@ class BlockCapture:
         return t.detach().float().cpu()
 
     def _gain(self, norm, name):
-        """Il guadagno di una RMSNorm, con la convenzione giusta.
+    """The gain of an RMSNorm layer, calculated with the correct convention.
 
-        Gemma memorizza il parametro come scarto e moltiplica per (1 + w).
-        Llama, Qwen, OLMo moltiplicano per w. Applicare la convenzione sbagliata
-        sposta la scomposizione per testa di una quantita' che sembra un
-        risultato. La distinzione e' rilevata in describe() e verificata dal
-        cancello per testa."""
+    Gemma stores the parameter as a deviation and multiplies by (1 + w). 
+    Llama, Qwen, and OLMo multiply directly by w. Applying the incorrect convention 
+    shifts the per-head decomposition by an artifact amount that looks like a valid result. 
+    The distinction is detected in `describe()` and verified by the per-head gate.
+    """
         g = self._w(norm, name)
         if g is None:
             return None
@@ -519,13 +524,14 @@ class BlockCapture:
         return t[:, self.pos, :].detach().float().cpu()
 
     def _res(self, t):
-        """Cio' che ENTRA nel residuo, non cio' che il modulo restituisce.
+    """WHAT ENTERS the residual stream, not what the module outputs.
 
-        Dove esiste un moltiplicatore residuo i due differiscono per un
-        fattore. Si applica qui e non dentro _at, perche' _at serve anche a
-        leggere lo stato in INGRESSO a una norma, che il moltiplicatore non
-        tocca. Scalando quello si romperebbe il calcolo dell'rms per testa.
-        """
+    Where a residual multiplier exists, the two differ by a factor. It is applied 
+    here and not inside `_at`, because `_at` is also used to read the INPUT state 
+    to a norm, which is unaffected by the multiplier. Scaling that state would break 
+    the per-head RMS calculation.
+    """
+
         m = getattr(self.arch, "residual_multiplier", 1.0)
         return t if m == 1.0 else t * m
 
@@ -536,20 +542,22 @@ class BlockCapture:
         return self._res(self._at(self.buf["f"]))
 
     def heads(self, which=None):
-        """Contributo di ciascuna testa al residuo: [B, nH, d].
+    """Contribution of each individual head to the residual stream: [B, nH, d].
 
-        o_proj e' lineare, quindi il contributo della testa h e' la sua fetta
-        di z proiettata con la sua fetta di W_o. Su architetture sandwich la
-        post-norma e' lineare A FRASE FISSATA, perche' rms(x) e' uno scalare:
-        si applica lo stesso fattore a ogni fetta e la somma torna esatta.
-        Il bias di o_proj, se c'e', NON e' attribuibile a nessuna testa e viene
-        restituito separatamente da bias_term().
+    `o_proj` is linear, so the contribution of head `h` is its slice of `z` projected 
+    with its corresponding slice of `W_o`. In sandwich architectures, the post-norm 
+    is linear AT A FIXED SENTENCE level because `rms(x)` is a scalar: the same factor 
+    applies to each slice and the sum reconstructs exactly. 
+    The bias of `o_proj`, if present, is NOT attributable to any head and is returned 
+    separately via `bias_term()`.
 
-        DISPOSITIVI. Le attivazioni vengono portate su CPU da _at, mentre i PESI
-        stanno dove sta il modello, di norma su GPU. Ogni peso letto qui va
-        quindi spostato esplicitamente, altrimenti l'operazione trova operandi
-        su dispositivi diversi. Il calcolo si fa su CPU perche' e' minuscolo e
-        perche' il risultato serve su CPU comunque."""
+    DEVICES. Activations are moved to the CPU by `_at`, whereas WEIGHTS remain 
+    where the model is allocated, typically on the GPU. Every weight tensor read 
+    here must therefore be explicitly moved, otherwise the operation encounters 
+    operands across different devices. The computation is performed on the CPU 
+    because it is tiny and because the final result is required by the CPU anyway.
+    """
+
         nH, hd = self.arch.n_heads, self.arch.head_dim
         W = self._w(self.op, "o_proj")                         # [d, nH*hd]
         Wh = W.view(W.shape[0], nH, hd)
@@ -652,9 +660,10 @@ class BlockCapture:
         return med, med < tol
 
     def bias_term(self):
-        """Il bias di o_proj, gia' passato per la post-norma se presente.
-        Non appartiene a nessuna testa. Nelle differenze intra-coppia si
-        cancella; nel cancello di identita' va contato."""
+    """The bias of o_proj, already passed through the post-norm layer if present.
+    It does not belong to any individual head. It cancels out in intra-pair 
+    differences; however, it must be accounted for in the identity gate.
+    """
         bias = getattr(self.op, "bias", None)
         if bias is None:
             return None
@@ -754,21 +763,22 @@ BlockCapture.router_directions = router_directions
 
 
 def routing(self, top_k=None):
-    """MoE: quali esperti sono stati scelti al token di lettura e con che peso.
+    """MoE: which experts were chosen at the token readout, and with what weight.
 
-    Richiede un cablaggio con router. L'uscita dei router varia fra
-    implementazioni: qui si accettano i logit grezzi [B, S, E] oppure una
-    tupla di cui si prende il primo elemento. I pesi sono softmax sui top_k,
-    che e' la forma piu' comune; se il tuo modello normalizza diversamente,
-    leggi 'logits' e ricalcola come serve.
+    Requires a wiring setup that includes a router. Router outputs vary across
+    implementations: this function accepts raw logits [B, S, E] or a tuple
+    where the first element is extracted. Weights are computed via softmax over top_k,
+    which is the most common form; if your model uses a different normalization,
+    read 'logits' and recompute as needed.
 
-    ATTENZIONE, e' il punto che conta per il disegno sperimentale: il router
-    instrada PER TOKEN, non per frase. Su una coppia minimale le due frasi
-    differiscono in un token, quindi la domanda vera e' se quel token cambia
-    gli esperti attivati al punto di lettura.
+    ATTENTION, this is the critical point for the experimental design: the router
+    routes PER TOKEN, not per sentence. In a minimal pair, the two sentences
+    differ by a single token, so the real question is whether that specific token
+    changes the activated experts at the readout point.
     """
+
     if "route" not in self.buf:
-        raise RuntimeError("nessun router agganciato: serve un Wiring con router")
+        raise RuntimeError("no router hooked: need a Wiring with router")
     r = self.buf["route"]
     tup = r if isinstance(r, tuple) else (r,)
     logits = tup[0]
@@ -810,13 +820,13 @@ BlockCapture.routing = routing
 
 
 def identity_gate(h_before, h_after, a, f, tol=1e-4, dtype_used="float32"):
-    """a + f deve ricostruire h[b+1] - h[b].
+    """Verifies that a + f reconstructs h[b+1] - h[b].
 
-    Restituisce (mediana dell'errore relativo, esito). Se l'esito e' falso, i
-    numeri a valle NON vanno letti: la scomposizione non descrive il modello.
-    Cause tipiche di un fallimento, in ordine di frequenza: hook sul modulo
-    invece che sulla post-norma su architetture sandwich, uso di bfloat16,
-    architettura post-norm vera in cui la scomposizione non esiste.
+    Returns (median of the relative error, outcome). If the outcome is False, 
+    downstream numerical values MUST NOT be read: the decomposition does not describe the model.
+    Typical causes of failure, in order of frequency: hook attached to the module 
+    instead of the post-norm in sandwich architectures, use of bfloat16, 
+    or true post-norm architecture where decomposition does not exist.
     """
     # detach: i cancelli sono misure, non parte di nessun calcolo differenziabile.
     # Senza questo, se il chiamante dimentica torch.no_grad() il grafo resta vivo
@@ -828,18 +838,18 @@ def identity_gate(h_before, h_after, a, f, tol=1e-4, dtype_used="float32"):
     ok = med < tol
     msg = ""
     if not ok:
-        msg = "identita' additiva fallita (mediana %.2e)." % med
+        msg = "additive identity failed (median %.2e)." % med
         if dtype_used != "float32":
-            msg += " Il dtype e' %s: il cancello richiede float32." % dtype_used
+            msg += " The dtype used is %s: the gate strictly requires float32." % dtype_used
         else:
-            msg += (" Controllare il punto di aggancio: su architetture sandwich "
-                    "va agganciata la post-norma, non il modulo.")
+            msg += (" Verify the hook point: on sandwich architectures "
+                    "the post-norm must be hooked, not the module.")
     return med, ok, msg
 
 
 def head_gate(per_head, a_captured, bias=None, tol=1e-4):
-    """La somma dei contributi per testa deve ricostruire il contributo di
-    attenzione catturato indipendentemente, piu' il bias se presente."""
+    """The sum of per-head contributions must reconstruct the independently 
+    captured attention contribution, plus the bias if present."""
     s = per_head.detach().sum(1)
     if bias is not None:
         s = s + bias.detach()
