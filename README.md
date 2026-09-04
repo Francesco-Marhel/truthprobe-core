@@ -38,17 +38,6 @@ sentences differently for months without anyone noticing, producing axes at
 cosine +0.52 while the arrangement between categories survived at Mantel +0.775.
 The convention is now impossible to leave implicit.
 
-### Scope, with a number for each condition
-
-The probe reads **factual truth**, inside a **controlled contrast**, on facts
-the model **represents**. All three are required:
-
-| condition | what happens without it |
-|---|---|
-| controlled contrast | on free-text pairs a surface-feature classifier with no model reaches AUC 0.814, above the best layer of any model tested |
-| known fact | separability falls with the behavioural know-rate; the axis-probe gap widens |
-| label matches representation | on adversarial labels the paired accuracy sits at 34-43%, below chance |
-
 ---
 
 ## Install
