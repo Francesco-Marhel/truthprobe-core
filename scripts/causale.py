@@ -1,53 +1,54 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""causale.py  --  cosa fa davvero l'FFN dopo il picco: ruota o erode?
+"""causale.py  --  what the FFN actually does after the peak: rotate or erode?
 
-La tabella rotazione contro erosione di campagna.py e' OSSERVATIVA: guarda
-dove punta la differenza media dell'FFN e lascia la lettura a te. Questo tool
-INTERVIENE: toglie una componente durante il forward e misura cosa sopravvive
-a valle. Sono due domande diverse e la seconda non si deduce dalla prima.
+The rotation-versus-erosion table in campagna.py is OBSERVATIONAL: it shows
+where the FFN's mean difference points and leaves the reading to you. This tool
+INTERVENES: it removes a component during the forward pass and measures what
+survives downstream. They are different questions, and the second does not
+follow from the first.
 
-L'ALGEBRA CHE SEPARA LE DUE IPOTESI
+THE ALGEBRA THAT SEPARATES THE TWO HYPOTHESES
 
-Sia v l'asse di verita' e f la scrittura dell'FFN. Scomponi f = f_par + f_ort,
-con f_par = (f.v)v.
+Let v be the truth axis and f the FFN's write. Decompose f = f_par + f_ort,
+with f_par = (f.v)v.
 
-  ROTAZIONE PURA. Se l'FFN aggiunge solo componenti ortogonali, il coseno fra
-  il residuo e v decade verso zero perche' la norma cresce senza che la
-  proiezione cambi. Ma NON puo' attraversare lo zero: (x+y).x = ||x||^2 > 0
-  per ogni y ortogonale a x. Serve una componente anti-parallela per cambiare
-  segno.
+  PURE ROTATION. If the FFN only adds orthogonal components, the cosine between
+  the residual and v decays toward zero because the norm grows while the
+  projection does not change. But it can NEVER cross zero: (x+y).x = ||x||^2 > 0
+  for every y orthogonal to x. An anti-parallel component is required to change
+  the sign.
 
-  EROSIONE. f_par punta contro v e sottrae proiezione. Il segno si inverte.
+  EROSION. f_par points against v and subtracts projection. The sign inverts.
 
-Osservativamente si distinguono guardando se la colonna "lungo" attraversa lo
-zero o si limita ad avvicinarsi. Causalmente si distinguono cosi': se togli
-f_ort e la leggibilita' a valle si conserva, la rotazione non stava facendo il
-danno; se togli f_par e si conserva, era lei.
+Observationally the two are told apart by whether the "along" column crosses
+zero or merely approaches it. Causally they are told apart like this: if you
+remove f_ort and downstream readability is preserved, rotation was not doing the
+damage; if you remove f_par and it is preserved, rotation was.
 
-I DUE MODI
+THE TWO MODES
 
-  direzionale   sostituisce la scrittura dell'FFN nella banda con una delle sue
-                proiezioni. Tre varianti piu' un controllo con direzione
-                casuale di pari norma, perche' rimuovere una componente grande
-                porta il modello fuori distribuzione e una parte del danno e'
-                disturbo, non direzione.
+  direzionale   replaces the FFN's write across the band with one of its
+                projections. Three variants plus a control that removes a
+                random direction of the same construction, because removing a
+                large component takes the model off distribution and part of
+                the damage is disturbance rather than direction.
 
-  gatevalue     congela una delle due componenti dello SwiGLU sostituendola
-                con la media di coppia, cosi' non puo' piu' portare il
-                contrasto vero/falso mentre la scala resta. Risponde a quale
-                delle due porta la verita' e quale la spinge contro.
-                Richiede un FFN a gate: non si applica ai MoE ne' a Phi.
+  gatevalue     freezes one of the two SwiGLU components by replacing it with
+                the intra-pair mean, so it can no longer carry the true/false
+                contrast while its scale remains. It answers which of the two
+                carries truth and which pushes against it. Requires a gated
+                FFN: it does not apply to MoE models nor to Phi.
 
-L'ASSE E' SEMPRE QUELLO INTATTO, fittato sulle sole coppie di addestramento
-della corsa senza interventi, e la lettura avviene sulle coppie tenute fuori.
-Rifittare dopo l'intervento misurerebbe se esiste ANCORA una direzione, non se
-quella di prima e' sopravvissuta.
+THE AXIS IS ALWAYS THE INTACT ONE, fit on the training pairs of the run without
+interventions, and read on the held-out pairs. Refitting after the intervention
+would measure whether a direction STILL exists, not whether the earlier one
+survived.
 
     python causale.py --model <path> --peak 16 --modo direzionale
     python causale.py --model <path> --peak 16 --modo gatevalue --per-blocco
 
-Compagno di arXiv:2607.16741. Licenza CC BY 4.0.
+Companion to arXiv:2607.16741. Licensed CC BY 4.0.
 """
 
 import argparse
