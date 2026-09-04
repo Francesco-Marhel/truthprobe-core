@@ -2,21 +2,25 @@
 """
 truthprobe.stats
 
-Le statistiche della serie, in un posto solo. AUC e fold vengono da
-truth_probe.py, il gauge da reorient_gauge.py, Mantel, frustrazione e
-affidabilita' da verifica_arrangement.py.
+A centralized module containing all statistical metrics for the series. 
+AUC and cross-validation folds originate from `truth_probe.py`; 
+gauge computations from `reorient_gauge.py`; and Mantel, frustration, 
+and reliability metrics are ported from `verifica_arrangement.py` (`arrangement_stress_test.py` etc...) .
 
-Due cose sono state cambiate rispetto agli originali, e sono cambiamenti di
-prestazione, non di definizione. Mantel e Mantel triplo sono vettorizzati: le
-permutazioni si generano a scaglioni invece che una alla volta, e con K=33 e
-9999 ripetizioni si passa da minuti a frazioni di secondo. Il test di
-regressione verifica che diano lo stesso r della versione a ciclo.
+Two core optimizations have been introduced compared to the original scripts. 
+These are strictly performance-driven enhancements, without altering mathematical 
+definitions. Both Mantel and Triple Mantel are now chunk-vectorized: 
+permutations are generated in batches rather than sequentially. For K=32 
+and 9,999 repetitions, execution time drops from minutes to fractions of a second. 
 
-UN AVVERTIMENTO SUI PAVIMENTI
-Il test di Mantel permuta le etichette di categoria, quindi le rietichettature
-possibili sono K fattoriale: sotto K=6 il p minimo raggiungibile e' grande e la
-significativita' non e' ottenibile comunque. mantel() lo segnala da solo.
+
+A WARNING ON RESOLUTION FLOORS:
+The Mantel test permutes category labels; therefore, the total number of possible 
+re-labelings is K factorial (K!). For K < 6, the minimum achievable p-value 
+is inherently large, making standard statistical significance unobtainable. 
+The `mantel()` function automatically flags and handles this resolution limit.
 """
+
 
 import itertools
 import math
