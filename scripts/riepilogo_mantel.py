@@ -1,40 +1,39 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""riepilogo_mantel.py  --  affidabilita' e legge, da una cartella di dizionari.
+"""riepilogo_mantel.py  --  reliability and law, from a folder of dictionaries.
 
-Con quattro modelli e quattro semi i confronti sono 120, e leggerli uno a uno
-non e' un lavoro che una persona debba fare. Questo tool li fa tutti e stampa
-solo le sintesi.
+With four models and four seeds the comparisons are 120, and reading them one by
+one is not work a person should do. This tool runs them all and prints only the
+summaries.
 
-NON reimplementa niente: importa `mantel`, `pearson` e `offdiag` da
-arrangement_stress_test.py, cosi' i numeri qui e quelli di un confronto singolo
-lanciato a mano sono per costruzione gli stessi. Se quel file cambia, cambia
-anche questo.
+It REIMPLEMENTS NOTHING: it imports `mantel`, `pearson` and `offdiag` from
+arrangement_stress_test.py, so the numbers here and those of a single comparison
+run by hand are the same by construction. If that file changes, this one changes
+with it.
 
-TRE COSE, IN QUEST'ORDINE
+THREE THINGS, IN THIS ORDER
 
-AFFIDABILITA'. Lo stesso modello con semi diversi. E' il pavimento di rumore:
-dice quanto una misura e' ripetibile prima di chiedersi se due modelli
-concordano. Senza questo numero nessun accordo fra modelli e' interpretabile.
+RELIABILITY. The same model under different seeds. It is the noise floor: it
+says how repeatable a measurement is before asking whether two models agree.
+Without this number no agreement between models is interpretable.
 
-LEGGE. Due modelli diversi. Separata in due colonne: stesso seme, cioe' stesse
-frasi, e semi incrociati, cioe' campioni disgiunti. La differenza fra le due e'
-il gonfiaggio dovuto al campione condiviso, misurato invece che assunto.
+LAW. Two different models. Split into two columns: same seed, that is the same
+sentences, and crossed seeds, that is disjoint samples. The difference between
+the two is the inflation due to a shared sample, measured rather than assumed.
 
-SOFFITTO. La radice del prodotto delle due affidabilita': il massimo accordo
-osservabile fra due misure imperfette che misurano la stessa cosa. Un valore
-osservato vicino al soffitto significa che non resta niente da spiegare; uno
-nettamente sotto significa che i due non misurano interamente la stessa cosa.
-Il corretto e' l'osservato diviso il soffitto, e va SEMPRE riportato accanto al
-grezzo: dividere per un soffitto basso amplifica il rumore, e sopra 1 la
-formula e' fuori dal suo dominio.
+CEILING. The square root of the product of the two reliabilities: the largest
+agreement observable between two imperfect measures of the same thing. An
+observed value close to the ceiling means nothing is left to explain; one
+clearly below means the two do not measure entirely the same thing. The
+corrected value is observed divided by ceiling, and it must ALWAYS be reported
+next to the raw one: dividing by a low ceiling amplifies noise, and above 1 the
+formula is outside its domain.
 
-PIENA E RISTRETTA. Ogni riga esce in due versioni: su tutte le categorie e sulle
-sole categorie la cui AUC dentro categoria supera la soglia su ENTRAMBI i lati.
-Dove il modello non conosce il fatto non c'e' direzione di verita', quindi
-quell'asse e' stimato su rumore e la sua riga nella matrice non e' ripetibile.
-La distanza fra le due versioni misura quanta parte della matrice il modello
-non sa leggere.
+FULL AND RESTRICTED. Every row comes in two versions: over all categories, and
+over only those whose within-category AUC clears the threshold on BOTH sides.
+Where the model does not know the fact there is no truth direction, so that axis
+is estimated on noise and its row in the matrix is not repeatable. The distance
+between the two versions measures how much of the matrix the model cannot read.
 
     python riepilogo_mantel.py campagne_k33
     python riepilogo_mantel.py campagne_k33 --perms 0       (solo r, istantaneo)
@@ -51,12 +50,12 @@ import sys
 try:
     import arrangement_stress_test as A
 except ImportError:
-    sys.exit("serve arrangement_stress_test.py nella stessa cartella: i due "
-             "devono usare la stessa aritmetica")
+    sys.exit("need arrangement_stress_test.py in the same folder: both "
+             "they must use the same arithmetic")
 
 
 def carica(cartella):
-    """Ogni *_gauge.json della cartella, indicizzato per modello e seme."""
+    """Each *_gauge.json file in the folder, indexed by model and seed."""
     out = []
     for radice, _, nomi in os.walk(cartella):
         for n in sorted(nomi):
