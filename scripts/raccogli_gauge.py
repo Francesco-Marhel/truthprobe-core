@@ -1,18 +1,25 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""raccogli_gauge.py  --  eigengap, frustrazione e margini dai bundle gauge.
+"""raccogli_gauge.py  --  eigengap, frustration and margins from gauge bundles.
 
-Legge i file prodotti dallo stage gauge e riporta, per ciascun bundle, il gap
-relativo fra il primo e il secondo autovalore, quante categorie sono state
-girate e quante sono sotto la soglia di identificabilita'.
+Reads the files produced by the gauge stage and reports, for each bundle, the
+relative gap between the first and second eigenvalue, how many categories were
+flipped, and how many fall below the identifiability threshold.
 
-L'EIGENGAP E' UNA CONDIZIONE A PRIORI: si calcola dalla sola matrice dei
-coseni, prima che qualsiasi segno sia assegnato e senza guardare nessun
-risultato. Per questo si riporta accanto a ogni bundle e non dopo aver visto
-se il gauge ha funzionato.
+THE EIGENGAP IS AN A PRIORI CONDITION: it is computed from the cosine matrix
+alone, before any sign is assigned and without reference to any result. That is
+why it is reported alongside every bundle rather than after seeing whether the
+gauge worked. It is also invariant under the gauge itself: S C S with S diagonal
+of plus and minus one is a similarity transformation, so the spectrum does not
+change.
 
-Se un bundle non porta il campo (bundle vecchi, o gauge non ancora eseguito),
-l'eigengap viene ricalcolato dalla matrice, che e' l'unica cosa che serve.
+FRUSTRATION is the fraction of triangles whose cycle product is negative. It is
+gauge-invariant for the same reason the cycle products are: every index appears
+twice in the product, so the signs cancel. It therefore measures an obstruction
+in the geometry rather than a choice of orientation.
+
+If a bundle does not carry the field (older bundles, or a gauge not yet run),
+the eigengap is recomputed from the matrix, which is all that is needed.
 
     python raccogli_gauge.py campagne_k33
     python raccogli_gauge.py campagne_k33 --filtro granite --latex
