@@ -29,8 +29,9 @@ import torch
 #  AUC e fold
 # =====================================================================
 def auc_score(s, y):
-    """AUC ROC su frasi singole, pari contati come mezzo. Definizione
-    identica a truth_probe.auc_score."""
+     """Computes the AUC ROC on single sentences, handling ties as 0.5.
+    Identical definition to truth_probe.auc_score.
+    """
     s = s.float()
     y = y.long()
     pos, neg = s[y == 1], s[y == 0]
@@ -52,19 +53,25 @@ def project_and_score(H, ax):
 
 
 def paired_accuracy(scores_true, scores_false):
-    """Frazione di coppie in cui il vero proietta sopra il falso.
+    """
+    Fraction of pairs where the true sample is projected above the false sample.
 
-    NON e' l'AUC e non e' intercambiabile con essa. Qui il topic e' controllato
-    dentro la coppia, quindi il valore e' molto piu' alto: sullo stesso
-    materiale si sono misurati 0.90 di accuratezza appaiata contro 0.72 di AUC.
-    Riportare sempre quale delle due si sta usando."""
+    This is NOT the AUC and is not interchangeable with it. Here, the topic is
+    controlled within the pair, so the value is much higher: on the same dataset,
+    we measured 0.90 for paired accuracy against 0.72 for AUC.
+    Always report which of the two metrics is being used.
+    """
     d = (scores_true - scores_false)
     return float((d > 0).float().mean() + 0.5 * (d == 0).float().mean())
 
 
 def kfold_pairs(n_pairs, k, seed=0):
-    """Fold SULLE COPPIE: una coppia non e' mai spezzata fra addestramento e
-    test, altrimenti il topic condiviso passerebbe da una parte all'altra."""
+    """
+    K-Fold cross-validation over pairs. 
+    
+    A pair is never split between the training and test sets to prevent 
+    data leakage of the shared topic across splits.
+    """
     idx = list(range(n_pairs))
     random.Random(seed).shuffle(idx)
     folds = [idx[i::k] for i in range(k)]
@@ -75,8 +82,11 @@ def kfold_pairs(n_pairs, k, seed=0):
 
 
 def se_binomial(p, n):
-    """Errore standard di una proporzione. Serve a non leggere come effetto
-    un delta che sta dentro il rumore di campionamento."""
+      """
+    Standard error of a proportion. 
+    Used to avoid misinterpreting an observed delta that falls within 
+    sampling noise as a true effect.
+    """
     return math.sqrt(max(p * (1 - p), 0.0) / max(n, 1))
 
 
@@ -220,16 +230,17 @@ def gauge_report(cats, signs, margins, thin_idx, name="global-axis"):
 
 
 def consensus_gauge(C, thin=0.10):
-    """Segni dall'autovettore principale della matrice dei coseni: e' il
-    rilassamento spettrale di massimizzare l'accordo collettivo dei segni.
+    """
+    Extracts signs from the principal eigenvector of the cosine matrix. 
+    This represents the spectral relaxation for maximizing collective sign agreement.
 
-    Restituisce (segni, margini, indici_sottili). I margini sono normalizzati
-    al massimo; sotto la soglia la categoria va riportata NON SEGNATA invece
-    che forzata, perche' li' il segno e' una moneta.
+    Returns (signs, margins, thin_indices). Margins are normalized to the maximum value.
+    Below the 'thin' threshold, the category should be reported as UNSTABLE (when the margin is thin) rather than 
+    forced, because in that region the sign acts as a currency (highly volatile/uncertain).
 
-    Un gauge non puo' fabbricare struttura: solo i segni relativi sono
-    osservabili, e i prodotti sui cicli chiusi sono invarianti sotto qualunque
-    assegnazione (vedi frustration)."""
+    A gauge cannot create structure: only relative signs are observable, and products 
+    over closed cycles are invariant under any gauge transformation (see frustration).
+    """
     C = torch.as_tensor(C).float()
     _, V = torch.linalg.eigh(C)
     u = V[:, -1]
@@ -247,9 +258,13 @@ def apply_gauge(C, s):
 
 
 def eigengap(C):
-    """Separazione del primo autovalore: quanto e' identificabile il gauge.
-    Nella serie il gap relativo correla circa a meno 0.93 con la frustrazione,
-    quindi predice dove i segni perderanno presa PRIMA di applicarli."""
+    """
+    Eigengap of the first eigenvalue: quantifies the identifiability of the gauge.
+
+    The relative gap strongly correlates with network frustration, serving as a 
+    predictive metric to anticipate where signs will be lost BEFORE actually 
+    applying them.
+    """
     C = torch.as_tensor(C).float()
     w = torch.linalg.eigvalsh(C).flip(0)
     lam1, lam2 = float(w[0]), float(w[1])
@@ -286,16 +301,18 @@ def spearman(x, y):
 
 
 def mantel(A, B, perms=9999, method="pearson", seed=0, chunk=512):
-    """Correlazione fra le celle fuori diagonale di due matrici, con p da
-    permutazione congiunta di righe e colonne di una delle due.
+   """
+    Computes the Mantel test correlation between the off-diagonal elements of two matrices.
+    The p-value is derived via joint permutation of rows and columns of one of the matrices.
 
-    Vettorizzato a scaglioni: stesso risultato del ciclo, molto piu' veloce.
+    Chunk-vectorized implementation: yields identical results to a standard loop 
+    but is significantly faster due to batching.
     """
     A = torch.as_tensor(A).float()
     B = torch.as_tensor(B).float()
     K = A.shape[0]
     if B.shape[0] != K:
-        raise ValueError("matrici di dimensione diversa: %d e %d" % (K, B.shape[0]))
+        raise ValueError("Matrices with different dimensions: %d e %d" % (K, B.shape[0]))
     m = _offdiag_mask(K)
     corr = pearson if method == "pearson" else spearman
 
@@ -334,10 +351,14 @@ def _triangles(K):
 
 
 def triple_mantel(A, B, perms=5000, seed=0):
-    """La stessa cosa sui prodotti dei triangoli. E' INVARIANTE DI GAUGE:
-    il prodotto C_ij C_jk C_ik non cambia sotto nessuna assegnazione di segni.
-    Quindi confronta la struttura senza dipendere dall'orientamento, ed e' il
-    numero da usare quando i gauge dei due bundle non sono confrontabili."""
+    """
+    The same as the Mantel test, but computed over cyclic triangle products. 
+    
+    It is GAUGE INVARIANT: the product C_ij * C_jk * C_ki is unchanged under 
+    any sign assignment. This metric compares network structure without being 
+    affected by orientation, making it the optimal choice when the gauge 
+    structures of the two bundles are not directly comparable.
+    """
     A = torch.as_tensor(A).float()
     B = torch.as_tensor(B).float()
     K = A.shape[0]
@@ -358,10 +379,14 @@ def triple_mantel(A, B, perms=5000, seed=0):
 
 
 def frustration(C, perms=5000, seed=0):
-    """Bilanciamento alla Harary: frazione di triangoli con prodotto negativo.
-    Invariante di gauge. Un triangolo frustrato non puo' essere risolto da
-    nessuna assegnazione di segni: e' un'ostruzione vera, non un errore di
-    orientamento. Il null scambia i segni delle celle mantenendo i moduli."""
+    """
+    Harary structural balance: computes the fraction of triangles with a negative product.
+
+    This metric is gauge invariant. A frustrated triangle cannot be resolved by any 
+    sign assignment; it represents a genuine structural obstruction rather than an 
+    orientation artifact. The null model randomizes the signs of the matrix elements 
+    while preserving their magnitudes (moduli).
+    """
     C = torch.as_tensor(C).float()
     K = C.shape[0]
     i, j, k = _triangles(K)
@@ -603,9 +628,14 @@ def restricted_law(C_a, C_b, know_a, know_b, cats, threshold=0.60,
 #  attenuazione classica
 # =====================================================================
 def reliabilities(r_ab, r_ac, r_bc):
-    """Da tre accordi a coppie alle affidabilita' dei tre, sotto il modello a
-    un fattore r_XY = lambda_X lambda_Y. E' l'attenuazione di Spearman (1904):
-    restringere a categorie note non cambia la legge, toglie l'attenuazione."""
+    """
+    Derives individual reliabilities from three pairwise agreements.
+    
+    Under a single-factor model, the observed correlation is factored as 
+    r_XY = lambda_X * lambda_Y. This corresponds to Spearman's (1904) 
+    classical correction for attenuation: restricting to known categories 
+    does not alter the underlying law, it merely removes the attenuation.
+    """
     def s(x, y, z):
         v = x * y / z if z != 0 else float("nan")
         return math.sqrt(v) if v == v and v > 0 else float("nan")
@@ -613,9 +643,12 @@ def reliabilities(r_ab, r_ac, r_bc):
 
 
 def attenuation_ceiling(rel_a, rel_b):
-    """Il massimo accordo osservabile fra due misure con quelle affidabilita',
-    se sotto c'e' un solo fattore condiviso. Un accordo SOPRA il soffitto
-    significa struttura comune in piu' del fattore; SOTTO significa che i due
-    non misurano interamente la stessa cosa."""
+    """
+    Computes the maximum observable agreement between two measures given their reliabilities.
+
+    Under the assumption of a single shared factor, an agreement ABOVE this ceiling 
+    indicates additional shared structure beyond that factor. An agreement BELOW 
+    this ceiling implies that the two measures do not capture entirely the same construct.
+    """
     v = rel_a * rel_b
     return math.sqrt(v) if v > 0 else float("nan")
