@@ -1,48 +1,55 @@
 # -*- coding: utf-8 -*-
 """
+
 truthprobe.subspace
 
-Confronti fra SOTTOSPAZI e misure spettrali.
+Subspace comparisons and spectral metrics.
 
-Tutto il resto della libreria confronta direzioni singole, con i coseni, oppure
-matrici di direzioni, con Mantel. Qui l'oggetto e' un altro: due sottospazi, e
-la domanda e' quante dimensioni condividono.
+The rest of this library focuses on comparing individual directions (via cosines) 
+or matrices of directions (via the Mantel test). This module shifts the focus 
+entirely: it compares two full subspaces, answering the fundamental question: 
+how many dimensions do they actually share?
 
-E' una domanda che il lavoro sulla serie pone gia' senza avere lo strumento
-per rispondere direttamente. L'affermazione che l'arrangement dell'attenzione
-copre circa meta' delle dimensioni effettive di quello dell'FFN dopo correzione
-per affidabilita' e' una frase sui sottospazi, stimata per via indiretta. Gli
-angoli principali la misurano.
+This question was already posed in our series before we had the direct tool 
+to answer it. The claim that 'the attention arrangement covers approximately 
+half the effective dimensions of the FFN arrangement after reliability correction' 
+is a statement about subspaces, initially estimated indirectly. The principal 
+angles implemented here provide the direct measurement.
 
-QUATTRO STRUMENTI, E COSA RISPONDONO
+FOUR TOOLS, AND WHAT THEY ANSWER:
 
-  principal_angles   dati due insiemi di direzioni, quanti angoli sono piccoli.
-                     Uno spettro, non un numero: due sottospazi possono
-                     condividere tre dimensioni su otto ed essere ortogonali
-                     nelle altre cinque, e un solo scalare lo nasconderebbe.
+    principal_angles: Given two sets of directions, it determines how many 
+                      angles are small. It returns a full spectrum rather than 
+                      a single scalar: two subspaces can share three dimensions 
+                      out of eight while being perfectly orthogonal in the 
+                      remaining five, a nuance that a single scalar would hide.
 
-  effective_rank     quante dimensioni un insieme di direzioni occupa DAVVERO,
-                     cioe' l'esponenziale dell'entropia spettrale. Non conta
-                     quante direzioni ci sono ma quanto sono indipendenti.
+    effective_rank:   Quantifies the continuous dimensionality effectively spanned 
+                      by a set of directions. It is the exponential of the spectral 
+                      entropy, measuring not just the raw count of directions, 
+                      but how many are linearly independent.
 
-  spectral_entropy   l'entropia di von Neumann della matrice di Gram
-                     normalizzata a traccia uno. Invariante di gauge, perche'
-                     dipende solo dallo spettro. E' l'eigengap generalizzato a
-                     tutto lo spettro: dove l'eigengap guarda il primo salto,
-                     questa guarda l'intera distribuzione.
+    spectral_entropy: The von Neumann entropy of the normalized Gram matrix 
+                      (trace of one). It is gauge invariant, depending exclusively 
+                      on the spectrum. It can be viewed as a generalized eigengap 
+                      across the entire spectrum: while the standard eigengap 
+                      looks only at the first spectral jump, this metric analyzes 
+                      the full distribution.
 
-  cka                somiglianza fra due insiemi di RAPPRESENTAZIONI, invariante
-                     per rotazione e scala. E' per confrontare stati, non assi:
-                     sugli assi il coseno e Mantel dicono di piu' perche' il
-                     segno e' informazione, mentre CKA lo butta via.
+    cka:              Measures the global similarity between two sets of REPRESENTATIONS. 
+                      It is invariant to rotation and isotropic scaling, designed to 
+                      compare full states rather than individual axes. Along the axes, 
+                      the signed cosine and Mantel test are more informative because 
+                      the sign itself carries meaning, whereas CKA discards it.
 
-UNA CAUTELA CHE VALE PER TUTTI
-Con d dimensioni e sottospazi di dimensione k, due sottospazi CASUALI hanno
-gia' angoli piccoli quando k non e' trascurabile rispetto a d. Il valore atteso
-a caso va sempre riportato accanto al risultato, ed e' per questo che ogni
-funzione qui lo restituisce insieme al numero, invece di lasciarlo calcolare a
-chi legge.
+A WARNING APPLICABLE TO ALL METRICS:
+In d dimensions and with subspaces of dimension k, two RANDOM subspaces will 
+inherently exhibit small angles when k is non-negligible relative to d. 
+The expected random baseline must always be reported alongside the empirical result. 
+For this reason, every relevant function in this module returns the raw numerical 
+baseline directly instead of leaving the computation to the reader.
 """
+
 
 import math
 
@@ -50,9 +57,13 @@ import torch
 
 
 def _orthonormal(A):
-    """Base ortonormale dello span delle RIGHE di A [k, d]. Restituisce [d, r]
-    con r il rango effettivo: se le righe sono dipendenti, r e' minore di k, e
-    quel fatto e' esso stesso un dato."""
+    """
+    Computes an orthonormal basis for the row space of A [k, d].
+    
+    Returns [d, r], where r is the effective rank. If the rows are linearly 
+    dependent, r will be strictly less than k. This numerical rank reduction 
+    is itself a valuable data point.
+    """
     A = torch.as_tensor(A).float()
     Q, R = torch.linalg.qr(A.T)
     tol = 1e-6 * max(A.shape) * float(R.diagonal().abs().max().clamp_min(1e-30))
@@ -61,17 +72,21 @@ def _orthonormal(A):
 
 
 def _angles(QA, QB):
-    """Angoli principali fra due basi ORTONORMALI, in radianti crescenti.
+   """
+    Computes the principal angles between two ORTHONORMAL bases, 
+    sorted in ascending order (in radians).
 
-    Il coseno da solo non basta. Calcolare l'angolo come arccos del valore
-    singolare e' instabile quando l'angolo e' piccolo: li' il coseno vale quasi
-    uno, e una perdita di precisione di 1e-7 sul coseno diventa 0.03 gradi
-    sull'angolo. Per un sottospazio condiviso esattamente si vorrebbe zero, e
-    quel residuo si scambierebbe per struttura.
+    Using the cosine alone is insufficient. Computing the angle solely as the 
+    arccos of the singular values becomes numerically unstable for small angles. 
+    When the angle is tiny, the cosine approaches 1; a minor loss of precision 
+    of 1e-7 in the cosine translates to an error of 0.03 degrees in the angle. 
+    For a shared subspace, where the true angle should be exactly zero, this 
+    residual error would be misinterpreted as structural divergence.
 
-    La cura e' quella classica di Bjorck e Golub: sopra 45 gradi si usa il
-    coseno, sotto si usa il SENO, cioe' la norma della parte di QB che sporge
-    dallo span di QA. Il seno e' accurato dove il coseno non lo e', e viceversa.
+    The remedy follows the classical Björck & Golub (1973) algorithm: for angles 
+    below 45 degrees, the cosine is substituted with the sine. The sine is derived 
+    from the norm of the projection of QB orthogonal to the span of QA. 
+    The sine function yields high precision where the cosine fails, and vice versa.
     """
     s = torch.linalg.svdvals(QA.T @ QB).clamp(-1.0, 1.0)
     ang = torch.arccos(s)
@@ -88,15 +103,18 @@ def _angles(QA, QB):
 
 
 def principal_angles(A, B, degrees=True):
-    """Angoli principali fra lo span delle righe di A e quello di B.
+    """
+    Computes the principal angles between the row space of A and B.
 
-    Restituisce gli angoli in ordine crescente, i coseni corrispondenti, e il
-    valore atteso per due sottospazi casuali delle stesse dimensioni.
+    Returns the angles sorted in ascending order, their corresponding cosines, 
+    and the expected baseline values for two random subspaces of the identical dimensions.
 
-    Il primo angolo e' zero quando i due sottospazi condividono una direzione
-    esatta. Il numero di angoli sotto una soglia e' la dimensione condivisa. Se
-    tutti gli angoli sono grandi i due sottospazi sono ortogonali, che con d
-    grande e k piccolo e' il caso generico: per questo c'e' il riferimento.
+    The first principal angle is exactly zero if and only if the two subspaces share 
+    an exact direction. The number of angles falling below a given threshold quantifies 
+    the shared dimensionality between the spaces. If all angles are large, the two 
+    subspaces are mutually orthogonal. In high-dimensional settings (large d, small k), 
+    orthogonality is the generic case; hence, the random baseline is provided for 
+    proper statistical calibration.
     """
     QA, QB = _orthonormal(A), _orthonormal(B)
     d = QA.shape[0]
@@ -120,11 +138,13 @@ def principal_angles(A, B, degrees=True):
 
 
 def subspace_overlap(A, B):
-    """Frazione dell'energia dello span di A che cade dentro lo span di B.
+     """
+    Fraction of the energy from the span of A that falls within the span of B.
 
-    E' la media dei coseni al quadrato degli angoli principali, cioe' la
-    generalizzazione a un sottospazio della frazione 'dentro' usata altrove per
-    un singolo vettore. Il valore atteso a caso e' circa dim(B)/d."""
+    It is computed as the mean of the squared cosines of the principal angles, 
+    generalizing the 'inside' fraction used elsewhere for a single vector to a 
+    full subspace. The expected baseline value at random is approximately dim(B)/d.
+    """
     r = principal_angles(A, B, degrees=False)
     return dict(overlap=float((r["cosines"] ** 2).mean()),
                 chance=r["dim_b"] / r["d"],
@@ -132,19 +152,22 @@ def subspace_overlap(A, B):
 
 
 def spectral_entropy(M, base="e", from_gram=True):
-    """Entropia di von Neumann dello spettro.
+     """
+    Von Neumann entropy of the spectrum.
 
-    M puo' essere una matrice di Gram gia' pronta (from_gram=True) oppure un
-    insieme di vettori riga, nel qual caso la Gram viene costruita.
+    M can either be a precomputed Gram matrix (from_gram=True) or a set of row 
+    vectors, in which case the Gram matrix will be constructed.
 
-    La matrice viene normalizzata a traccia uno, cosi' gli autovalori sono
-    probabilita' e l'entropia e' quella di von Neumann in senso proprio. Gli
-    autovalori negativi da errore numerico vengono azzerati, non ignorati in
-    silenzio: se ce ne sono di grandi la matrice non e' semidefinita positiva e
-    il numero non ha senso, quindi la funzione lo dichiara.
+    The matrix is normalized to have a trace of one, ensuring the eigenvalues 
+    act as a probability distribution and the resulting value is a true von Neumann 
+    entropy. Negative eigenvalues arising from numerical precision errors are zeroed 
+    out rather than silently ignored; if large negative eigenvalues are present, 
+    the matrix is not positive semi-definite and the metric becomes meaningless, 
+    which this function explicitly tracks and declares.
 
-    Invariante di gauge: dipende solo dallo spettro, e cambiare i segni delle
-    categorie e' una trasformazione di similarita' che lo lascia intatto."""
+    Gauge invariant: depends exclusively on the spectrum. Changing category signs 
+    amounts to a similarity transformation, leaving the eigenvalues intact.
+    """
     M = torch.as_tensor(M).float()
     if not from_gram:
         M = M @ M.T
@@ -164,36 +187,41 @@ def spectral_entropy(M, base="e", from_gram=True):
     return dict(entropy=H, effective_rank=math.exp(H if base == "e" else H * math.log(2)),
                 max_entropy=math.log(K) if base == "e" else math.log2(K),
                 n_dims=K, negative_eig=neg,
-                warning=("spettro con autovalori negativi non trascurabili: la "
-                         "matrice non e' semidefinita positiva e l'entropia non "
-                         "e' interpretabile") if neg > 1e-4 * tot else "")
+                warning=("Spectrum contains non-negligible negative eigenvalues: the "
+                         "matrix is not positive semi-definite and the entropy is not "
+                         "interpretable.") if neg > 1e-4 * tot else "")
 
 
 def effective_rank(A, from_gram=False):
-    """Quante dimensioni un insieme di direzioni occupa davvero.
+    """
+    The continuous dimensionality effectively spanned by a set of directions.
 
-    K assi perfettamente ortogonali danno rango effettivo K; K assi tutti
-    paralleli danno 1. E' la quantita' che serve quando si dice che un
-    arrangement copre meno dimensioni di un altro."""
+    K perfectly orthogonal axes yield an effective rank of K; K perfectly parallel 
+    axes yield 1. This is the precise metric required to quantify when one 
+    arrangement covers fewer dimensions than another.
+    """
     r = spectral_entropy(A, from_gram=from_gram)
     return dict(effective_rank=r["effective_rank"], entropy=r["entropy"],
                 n_dims=r["n_dims"], max_possible=r["n_dims"])
 
 
 def cka(X, Y, unbiased=False):
-    """Centered Kernel Alignment lineare fra due insiemi di rappresentazioni.
+    """
+    Linear Centered Kernel Alignment between two sets of representations.
 
-    X e Y sono [n, d1] e [n, d2] sulle STESSE n osservazioni, nello stesso
-    ordine. Invariante per rotazione e scala isotropa, non per riscalatura per
-    coordinata.
+    X and Y are tensors of shape [n, d1] and [n, d2] computed over the EXACT 
+    SAME n observations, in the identical order. It is invariant to rotation 
+    and isotropic scaling, but not to coordinate-wise rescaling.
 
-    Serve a confrontare STATI, non assi. Sugli assi il coseno con segno e
-    Mantel dicono di piu', perche' nel lavoro di questa serie il segno e'
-    informazione e CKA lo scarta per costruzione."""
+    This metric is used to compare STATES, not individual axes. Along the axes, 
+    the signed cosine and the Mantel test are more informative because, 
+    in the context of this work series, the sign itself carries information, 
+    whereas CKA discards signs by design.
+    """
     X = torch.as_tensor(X).float()
     Y = torch.as_tensor(Y).float()
     if X.shape[0] != Y.shape[0]:
-        raise ValueError("CKA vuole le stesse osservazioni: %d contro %d"
+        raise ValueError("CKA requires the same number of observations: %d contro %d"
                          % (X.shape[0], Y.shape[0]))
     X = X - X.mean(0, keepdim=True)
     Y = Y - Y.mean(0, keepdim=True)
@@ -208,23 +236,25 @@ def cka(X, Y, unbiased=False):
 #  valutazione di feature esterne, per esempio da un autoencoder sparso
 # =====================================================================
 def feature_alignment(features, axes, perms=1000, seed=0):
-    """Quanto un insieme di feature esterne si allinea agli assi di categoria.
+    """
+    Quantifies how closely a set of external features aligns with category axes.
 
-    features: [m, d] direzioni prodotte da chiunque, tipicamente le righe del
-              decoder di un autoencoder sparso
-    axes:     [K, d] gli assi di categoria del dizionario misurato
+    features: [m, d] directions produced from any source, typically the rows 
+              of the decoder of a sparse autoencoder.
+    axes:     [K, d] the measured dictionary category axes.
 
-    Per ogni asse riporta il massimo |coseno| su tutte le feature, e lo confronta
-    con un null di direzioni casuali della stessa dimensione. Il null e'
-    necessario e non decorativo: con m feature in d dimensioni il massimo su m
-    tentativi cresce con m anche se le feature sono casuali, quindi un valore
-    alto senza null non dice nulla.
+    For each axis, it reports the maximum absolute cosine |cosine| across all features 
+    and compares it against a null model of random directions of the same dimension. 
+    The null model is necessary and not decorative: with m features in d dimensions, 
+    the maximum over m random trials increases inherently with m. Therefore, a high 
+    observed value is meaningless without baseline validation.
 
-    QUESTA NON E' UNA IMPLEMENTAZIONE DI AUTOENCODER, ed e' una scelta. Questa
-    libreria fornisce il riferimento misurato e il criterio; addestrare il
-    modello concorrente e' compito di chi lo propone. La valutazione e' misura,
-    l'addestramento e' un metodo, e tenerli separati e' cio' che rende il
-    criterio dichiarabile in anticipo."""
+    THIS IS NOT AN AUTOENCODER IMPLEMENTATION, and that is a deliberate design choice. 
+    This library provides the baseline measurement and the evaluation criterion; training 
+    a competing model is the responsibility of whoever proposes it. Evaluation is a metric, 
+    training is a method; keeping them strictly decoupled is precisely what 
+    makes the evaluation criterion pre-declarable and unbiased.
+    """
     F = torch.as_tensor(features).float()
     A = torch.as_tensor(axes).float()
     F = F / F.norm(dim=1, keepdim=True).clamp_min(1e-12)
