@@ -40,12 +40,46 @@ The convention is now impossible to leave implicit.
 
 ---
 
-## Install
+## Quickstart
+
+Two runs. The first finds the peak, the second measures on it.
 
 ```bash
 pip install -e .
-python scripts/campagna.py --model <hf-name-or-path> --stages behav,signal
 ```
+
+**1. Behaviour and signal.** Nothing else can run before these: the peak block
+they report is the anchor for every later stage.
+
+```bash
+python scripts/campagna.py --model Qwen/Qwen2.5-1.5B \
+    --stages behav,signal --file-counterfact counterfact.parquet
+```
+
+The log ends with a line like `livello migliore (1D, fuori campione): 16`.
+Subtract one, and write the block to `campagne/<model>/landmarks.json`:
+
+```json
+{"peak_block": 15}
+```
+
+**2. Everything else.** Now the geometry, the mechanics and the dictionaries.
+
+```bash
+python scripts/campagna.py --model Qwen/Qwen2.5-1.5B \
+    --stages anatomy,flip,frames,ablazione,categories,dizionario,gauge \
+    --seeds 5 --file-counterfact counterfact.parquet
+```
+
+**3. Compare models.** With four seeds per model in a folder:
+
+```bash
+python scripts/riepilogo_mantel.py campagne_k33 --perms 999 --soglia 0.6
+python scripts/raccogli_gauge.py campagne_k33
+```
+
+The dataset is fetched from HuggingFace if `--file-counterfact` is omitted.
+Every run writes its protocol into the log header and into every artifact.
 
 `torch` is the only hard dependency. `transformers` and `datasets` are the
 `[models]` extra, needed only when a model is loaded: the pure functions install
