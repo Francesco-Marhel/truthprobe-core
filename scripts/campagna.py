@@ -1,44 +1,46 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""campagna.py  --  l'intera campagna fondamentale su UN modello, in un file.
+"""campagna.py  --  the whole core campaign on ONE model, in one file.
 
-Sostituisce la catena di montaggio (truth_probe -> anatomy -> flip_consolidate
--> categories -> crea_dizionario -> reorient_gauge) con un solo file scritto
-sopra `truthprobe`. La matematica non e' qui: sta nella libreria, dove e' gia'
-verificata identica al canonico funzione per funzione. Qui ci sono soltanto le
-DECISIONI: cosa misurare, in che ordine, con quale protocollo.
+Replaces the assembly line (truth_probe -> anatomy -> flip_consolidate ->
+categories -> crea_dizionario -> reorient_gauge) with a single file written on
+top of `truthprobe`. The mathematics is not here: it lives in the library,
+where it is already verified against the canonical code function by function.
+What is here is only the DECISIONS: what to measure, in what order, under which
+protocol.
 
-PERCHE' ESISTE
-La catena canonica si spezza sui modelli fuori dal set noto, perche' ogni file
-implementa la scomposizione assumendo un'architettura pre-norm. Su OLMo 2, che
-normalizza in uscita, l'identity check esce a 6.65 e lo stage aborta, come deve.
-`truthprobe.hooks` l'architettura la DESCRIVE invece di assumerla, e verifica se
-stessa con un cancello. Questo file e' la catena rifatta su quelle fondamenta.
+WHY IT EXISTS
+The canonical chain breaks on models outside the known set, because every file
+implements the decomposition assuming a pre-norm architecture. On OLMo 2, which
+normalises on the way out, the identity check comes out at 6.65 and the stage
+aborts, as it should. `truthprobe.hooks` DESCRIBES the architecture instead of
+assuming it, and verifies itself with a gate. This file is that chain rebuilt on
+those foundations.
 
-DUE ESTRAZIONI, NON CINQUE
-La catena canonica passa cinque volte sul modello per leggere gli stessi stati.
-Qui i passaggi sono due: uno sul campione piatto da 250 coppie (signal, anatomy,
-flip) e uno sul campione raggruppato da K x n (categories, dizionario). Tutto il
-resto sono cicli su tensori in memoria. E' il principio che flip_consolidate
-dichiara gia': l'estrazione e' l'unico passo costoso.
+TWO EXTRACTIONS, NOT FIVE
+The canonical chain passes over the model five times to read the same states.
+Here there are two: one on the flat sample of 250 pairs (signal, anatomy, flip)
+and one on the grouped sample of K x n (categories, dizionario). Everything else
+is loops over tensors already in memory. It is the principle flip_consolidate
+already states: extraction is the only expensive step.
 
-REGOLE DI CASA, INVARIATE
-  - non misura finche' <outdir>/00_predizioni.txt non esiste e non e' vuoto
-  - il know-rate comportamentale gira PRIMA di qualsiasi geometria
-  - il picco lo leggi TU dal log e lo scrivi in <outdir>/landmarks.json
-  - nessun verdetto conclusivo: le tabelle si leggono, non si riassumono
-  - la provenienza viaggia dentro ogni artefatto prodotto
+HOUSE RULES, UNCHANGED
+  - nothing is measured until <outdir>/00_predizioni.txt exists and is not empty
+  - the behavioural know-rate runs BEFORE any geometry
+  - YOU read the peak from the log and write it into <outdir>/landmarks.json
+  - no concluding verdict: the tables are to be read, not summarised
+  - provenance travels inside every artifact produced
 
-UNITA'
-Il log di signal stampa un LIVELLO di hidden state (0 = embedding, b+1 = uscita
-del blocco b). landmarks.json vuole un BLOCCO: peak = livello_migliore - 1.
-Lo stage anatomy stampa direttamente "peak residual layer = block N".
+UNITS
+The signal log prints a hidden-state LEVEL (0 = embedding, b+1 = output of
+block b). landmarks.json wants a BLOCK: peak = best_level - 1. The anatomy
+stage prints "peak residual layer = block N" directly.
 
     python campagna.py --model <path> --stages behav,signal
-    # leggi il picco, scrivi landmarks.json, poi:
+    # read the peak, write landmarks.json, then:
     python campagna.py --model <path> --stages rest
 
-Compagno di arXiv:2607.16741. Licenza CC BY 4.0.
+Companion to arXiv:2607.16741. Licensed CC BY 4.0.
 """
 
 import argparse
@@ -76,26 +78,26 @@ DOPO_PICCO = {"anatomy", "flip", "frames", "ablazione", "geometria",
 #  cancelli
 # =====================================================================
 def gate_predizioni(out, modello):
-    """Nessuna misura senza predizioni scritte prima.
+    """no measurements without pre-registered prediction
 
-    Se il file non c'e' lo crea vuoto e si ferma. Non e' burocrazia: una
-    predizione formulata dopo aver visto il numero non e' una predizione.
     """
     p = os.path.join(out, "00_predizioni.txt")
     if os.path.exists(p) and os.path.getsize(p) > 0:
         with open(p, encoding="utf-8") as f:
             return f.read()
     with open(p, "w", encoding="utf-8") as f:
-        f.write("# Predizioni PRIMA delle corse per " + modello + "\n"
-                "# (compila e rilancia; il cancello non misura senza)\n"
-                "# 1. know-rate atteso:\n"
-                "# 2. posizione del picco (blocco, e perche'):\n"
-                "# 3. AUC dell'asse al picco:\n"
-                "# 4. al picco legge di piu' l'attenzione o l'FFN:\n"
-                "# 5. flip dell'FFN a picco+1 (si', no, e con che segno):\n"
-                "# 6. quante categorie superano il cancello di conoscenza:\n"
-                "# 7. Mantel atteso contro Qwen e contro Llama:\n")
-    sys.exit("[cancello] predizioni create VUOTE: compila %s e rilancia." % p)
+        f.write(
+            "# Predictions BEFORE runs for " + modello + "\n"
+            "# (fill in and rerun; the gate will not measure without it)\n"
+            "# 1. expected know-rate:\n"
+            "# 2. peak position (block, and rationale):\n"
+            "# 3. axis AUC at peak:\n"
+            "# 4. at peak, does attention or FFN read/contribute more:\n"
+            "# 5. FFN flip at peak+1 (yes/no, and sign):\n"
+            "# 6. how many categories pass the knowledge gate:\n"
+            "# 7. expected Mantel correlation against Qwen and against Llama:\n"
+        )
+    sys.exit("[gate] empty predictions created: fill in %s and rerun." % p)
 
 
 def gate_landmarks(out, stages):
@@ -104,18 +106,18 @@ def gate_landmarks(out, stages):
     if not any(s in DOPO_PICCO for s in stages):
         return None
     if not os.path.exists(lm):
-        sys.exit("[cancello] %s mancante.\n"
-                 "  Se su questo modello non hai ancora lanciato signal, e' quello\n"
-                 "  il primo passo: --stages signal. Il picco non si indovina, si\n"
-                 "  legge dalla curva e lo decidi tu.\n"
-                 "  ATTENZIONE ALLE UNITA': 02_signal stampa un LIVELLO,\n"
-                 "  landmarks.json vuole un BLOCCO: peak = livello - 1.\n"
-                 "  Controprova: 03_anatomy dice 'peak residual layer = block N'\n"
-                 "  e quel N si scrive tale e quale.\n"
-                 '  Scrivi in %s:  {"peak": N}' % (lm, lm))
+        sys.exit("[gate] %s missing.\n"
+            "  If you haven't run 'signal' on this model yet, that is the\n"
+            "  first step: --stages signal. The peak is not guessed; it is\n"
+            "  read from the curve and decided by you.\n"
+            "  ATTENTION TO UNITS: 02_signal outputs a LEVEL,\n"
+            "  landmarks.json expects a BLOCK: peak = level - 1.\n"
+            "  Sanity check: 03_anatomy says 'peak residual layer = block N'\n"
+            "  and that exact N should be written as is.\n"
+            "  Write in %s: {'peak': N}" % (lm, lm) )
     P = int(json.load(open(lm))["peak"])
-    print("[landmarks] picco = BLOCCO %d  (livello %d nel log di signal, "
-          "write layer %d, banda %d-%d)" % (P, P + 1, P + 1, P + 1, P + 3))
+    print("[landmarks] peak = Block %d  (layer %d of log signal, "
+          "write layer %d, band %d-%d)" % (P, P + 1, P + 1, P + 1, P + 3))
     return P
 
 
@@ -174,8 +176,8 @@ def carica(nome, device, max_vram=None, offload_folder=None, tronca=None,
         # non un'approssimazione. Si perdono i logit finali, quindi NON si puo'
         # misurare il know-rate su un modello troncato.
         kw["num_hidden_layers"] = tronca
-        print("[carica] modello troncato a %d blocchi: esatto fino al blocco %d, "
-              "logit finali privi di senso" % (tronca, tronca - 1))
+        print("[load] modello troncato a %d blocks: esatto fino al blocco %d, "
+              "final logit no-sense" % (tronca, tronca - 1))
     if max_vram:
         kw["device_map"] = "auto"
         kw["max_memory"] = {0: max_vram, "cpu": "24GiB"}
@@ -204,11 +206,11 @@ def avvisa_taglia(nome, device, max_vram):
 
 @torch.no_grad()
 def estrai(model, tok, items, arch, device, batch=8):
-    """Un passaggio per lotto, tutti i blocchi agganciati.
-
-    Restituisce il residuo [N, L+1, d] e i due contributi [N, L, d], letti al
-    token finale. Agganciare ogni blocco e' quello che rende possibile fare
-    tutta la campagna con una sola estrazione.
+    """One forward pass per batch, with every block hooked.
+ 
+    Returns the residual [N, L+1, d] and the two contributions [N, L, d], read
+    at the final token. Hooking every block is what makes it possible to run
+    the whole campaign from a single extraction.
     """
     caps = [BlockCapture(model, arch, b) for b in range(arch.n_blocks)]
     for c in caps:
@@ -232,10 +234,10 @@ def estrai(model, tok, items, arch, device, batch=8):
 
 
 def errore_identita(R, A, Fq):
-    """h_{b+1} - h_b == a_b + f_b, errore relativo per (frase, blocco).
-
-    La MEDIANA, non il massimo: dove un blocco aggiunge quasi nulla il delta e'
-    vicino a zero e il rapporto esplode anche su una ricostruzione esatta.
+    """h_{b+1} - h_b == a_b + f_b, relative error per (sentence, block).
+ 
+    The MEDIAN, not the maximum: where a block adds almost nothing the delta is
+    near zero and the ratio explodes even on an exact reconstruction.
     """
     L = A.shape[1]
     delta = R[:, 1:L + 1, :] - R[:, 0:L, :]
@@ -247,14 +249,14 @@ def errore_identita(R, A, Fq):
 #  stimatori canonici, portati alla lettera
 # =====================================================================
 def punteggi_tre(Hl, ax):
-    """Le tre colonne del canonico: 1D, MAG, PHASE.
-
-    MAG e' -risk, cioe' (sigmoid(Re) - 0.5) * tanh(m/r): la posizione
-    schiacciata e ripesata dall'energia, non il modulo nudo. Conserva il segno
-    di Re, quindi il suo ordinamento coincide quasi sempre con quello di 1D e
-    la sua AUC non puo' che coincidere. PHASE e' -phase_dev, la distanza
-    angolare dalla direzione media della classe vera, ed e' l'unica delle tre
-    che non sia una trasformazione monotona della posizione.
+    """The canonical three columns: 1D, MAG, PHASE.
+ 
+    MAG is -risk, that is (sigmoid(Re) - 0.5) * tanh(m/r): position squashed
+    and reweighted by energy, not the bare modulus. It preserves the sign of
+    Re, so its ordering almost always coincides with that of 1D and its AUC can
+    hardly differ. PHASE is -phase_dev, the angular distance from the mean
+    direction of the true class, and is the only one of the three that is not a
+    monotone transform of position.
     """
     f = project_fields(Hl, ax)
     return {"1D": f["Re"], "MAG": -f["risk"], "PHASE": -f["phase_dev"]}
@@ -275,7 +277,7 @@ def auc_variante(Hl, pidx, folds, seed, variante="1D"):
 
 
 def null_permutazione(Hl, pidx, folds, seed, nperm, variante="1D", scegli=None):
-    """Null: si scambia vero e falso DENTRO la coppia e si rifitta.
+    """Permutation Null: swap true and false, and rifit.
 
     Se `scegli` e' una funzione, viene applicata a ogni ripetizione per
     riprodurre anche la selezione (per esempio la scelta dello strato
@@ -310,7 +312,7 @@ def null_permutazione(Hl, pidx, folds, seed, nperm, variante="1D", scegli=None):
 
 
 def probe_canonico(H, pidx, folds=5, seed=0, iters=300, lr=0.05, l2=1e-2):
-    """Il probe lineare pieno del canonico, con le sue scelte esatte.
+    """canonical linear probe.
 
     Standardizza per feature con le statistiche del solo training, ha
     un'intercetta, e aggrega accumulando TUTTI i punteggi fuori campione in un
@@ -360,7 +362,7 @@ def probe_canonico(H, pidx, folds=5, seed=0, iters=300, lr=0.05, l2=1e-2):
 
 
 def assi_per_fold(Hax, pidx, folds, seed, orient=None):
-    """L'asse fisso, fittato una volta per fold e riusato su tutti gli strati."""
+    """The fixed axis, fit once per fold and reused across all layers."""
     out = []
     for tr, te in kfold_pairs(len(pidx), folds, seed):
         o = None if orient is None else [orient[p] for p in tr]
@@ -369,12 +371,12 @@ def assi_per_fold(Hax, pidx, folds, seed, orient=None):
 
 
 def gap_su_asse(Hc, pidx, axes, orient=None):
-    """Gap di classe fuori campione di un contributo, su assi prefittati.
-
-    Il gap e' in unita' GREZZE della proiezione su v1, quindi la sua scala
-    dipende dal modello. d' divide per la deviazione standard aggregata ed e'
-    adimensionale. La distinzione conta: un pavimento fisso applicato al gap
-    e' piu' severo sui modelli con stati compressi.
+    """Held-out class gap of a contribution, on prefit axes.
+ 
+    The gap is in RAW units of the projection on v1, so its scale depends on
+    the model. d' divides by the pooled standard deviation and is
+    dimensionless. The distinction matters: a fixed floor applied to the gap is
+    harsher on models with compressed states.
     """
     gaps, ds = [], []
     for ax, te in axes:
@@ -405,7 +407,8 @@ def matrice_coseni(H, per_cat):
 
 
 def matrice_trasferimento(H, per_cat, folds, seed):
-    """Diagonale: CV dentro la categoria. Fuori: asse su tutta A, letto su B."""
+    """Diagonal: cross-validation within the category. Off-diagonal: axis fit on
+       all of A, read on B."""
     cats = sorted(per_cat)
     K = len(cats)
     M = torch.zeros(K, K)
@@ -472,13 +475,13 @@ def decodifica_con_null(D, labels, folds, seed, perms):
 #  stage
 # =====================================================================
 def stage_behav(a, out):
-    """Il comportamento prima della geometria.
+    """verify behav any geometry.
 
     Corrispondenza di stringa su una completazione greedy corta: e' un limite
     inferiore rumoroso, non un'etichetta. E NON e' confrontabile fra famiglie,
     perche' eredita tokenizer e stile di completamento.
     """
-    print("\n[task behav] know-rate comportamentale, prima di ogni geometria")
+    print("\n[task behav] know-rate, before geometry")
     ps = counterfact_flat(CANONICAL, max_pairs=a.n_behav, local_file=a.file_counterfact)
     dev = a.device
     # bfloat16: qui si guarda cosa il modello SCRIVE, non identita' additive.
@@ -488,8 +491,8 @@ def stage_behav(a, out):
     bf = torch.bfloat16 if a.device == "cuda" else torch.float32
     ridotto = None if bf == torch.bfloat16 else a.max_vram
     tok, model = carica(a.model, dev, ridotto, a.offload_folder, dtype=bf)
-    print("[behav] %s: il know-rate confronta completazioni, non ha bisogno "
-          "del float32" % ("bfloat16" if bf == torch.bfloat16 else "float32"))
+    print("[behav] %s: il know-rate dont need float32 "
+           % ("bfloat16" if bf == torch.bfloat16 else "float32"))
     dev = getattr(model, "device", dev)
     noti = 0
     with torch.no_grad():
@@ -511,16 +514,16 @@ def stage_behav(a, out):
         torch.cuda.empty_cache()
     kr = noti / len(ps.pairs)
     print("\n=== KNOWN fraction: %d%% (%d/%d) ===" % (round(100 * kr), noti, len(ps.pairs)))
-    print("  (corrispondenza di stringa su decodifica greedy: limite inferiore")
-    print("   rumoroso, e non confrontabile fra famiglie diverse)")
+    print("  (string match under greedy decoding: a lower bound")
+    print("   noisy, and not comparable across different families)")
     return kr
 
 
 def stage_signal(a, R, pidx):
-    print("\n[task signal] asse di verita', probe pieno, null di permutazione")
+    print("\n[task signal] truth axis', probe, permutation null")
     nL = R.shape[1]
     curva = {}
-    print("livello |  1D   |  MAG  | PHASE")
+    print("layer |  1D   |  MAG  | PHASE")
     for h in range(nL):
         Hl = R[:, h, :]
         riga = {v: auc_variante(Hl, pidx, a.folds, a.seed, v)
@@ -528,13 +531,13 @@ def stage_signal(a, R, pidx):
         curva[h] = riga
         print("   %4d | %.3f | %.3f | %.3f" % (h, riga["1D"], riga["MAG"], riga["PHASE"]))
     best = max(curva, key=lambda h: curva[h]["1D"])
-    print("\nlivello migliore (1D, fuori campione): %d   AUC %.3f"
+    print("\nbest layer (1D, fuori campione): %d   AUC %.3f"
           % (best, curva[best]["1D"]))
-    print("  -> in landmarks.json scrivi il BLOCCO, cioe' %d" % (best - 1))
-    print("ablazione @livello %d: 1D=%.3f MAG=%.3f PHASE=%.3f"
+    print("  -> in landmarks.json write block, it is:' %d" % (best - 1))
+    print("ablation @layer %d: 1D=%.3f MAG=%.3f PHASE=%.3f"
           % (best, curva[best]["1D"], curva[best]["MAG"], curva[best]["PHASE"]))
     pr = probe_canonico(R[:, best, :], pidx, a.folds, a.seed)
-    print("probe lineare pieno @livello %d: %.3f   (geometria 1D: %.3f)"
+    print("full linear probe @layer %d: %.3f   (geometry 1D: %.3f)"
           % (best, pr, curva[best]["1D"]))
     if a.perm:
         def scegli(o):
@@ -556,7 +559,7 @@ def stage_signal(a, R, pidx):
         null = null_permutazione(None, pidx, a.folds, a.seed, a.perm, scegli=scegli)
         oss = curva[best]["1D"]
         p = float((null >= oss).sum() + 1) / (len(null) + 1)
-        print("null di permutazione: media %.3f  95pct %.3f  osservato %.3f  p=%.4f"
+        print("permutation null: media %.3f  95pct %.3f  osservato %.3f  p=%.4f"
               % (float(null.mean()), float(null.sort().values[int(0.95 * (len(null) - 1))]),
                  oss, p))
         print("  (il null include la scelta del livello migliore, quindi la sua")
@@ -574,18 +577,18 @@ def _ms(v):
 
 
 def stage_anatomy(a, R, A, Fq, pidx):
-    """Leggibilita' per strato dei tre flussi, mediata su piu' semi.
-
-    Il seme governa la partizione in fold, non il campione: mediarci sopra
-    separa la variabilita' della stima da quella del modello. Senza la
-    dispersione la tabella non dice se una differenza fra due colonne sia
-    distinguibile da zero, e con 250 coppie l'errore standard e' 0.022.
+    """Per-layer readability of the three streams, averaged over several seeds.
+ 
+    The seed governs the fold partition, not the sample: averaging over it
+    separates the variability of the estimate from that of the model. Without
+    the spread the table cannot say whether a difference between two columns is
+    distinguishable from zero, and with 250 pairs the standard error is 0.022.
     """
     print("\n[task anatomy] dove nasce l'asse: attenzione o FFN?")
     print("       media su %d semi, il piu' meno e' la dispersione fra semi"
           % a.seeds)
     L = A.shape[1]
-    print("blocco |        resid |         attn |          ffn")
+    print("block  |        resid |         attn |          ffn")
     tab, tab_sd = [], []
     for b in range(L):
         rs = [auc_variante(R[:, b + 1, :], pidx, a.folds, s) for s in range(a.seeds)]
@@ -597,13 +600,13 @@ def stage_anatomy(a, R, A, Fq, pidx):
               % (b, r, sr, at, sa, ff, sf))
     pk = max(range(L), key=lambda b: tab[b][0])
     print("\n=== peak residual layer = block %d (residual AUC %.3f) ===" % (pk, tab[pk][0]))
-    print("  contributo attenzione AUC : %.3f ±%.3f" % (tab[pk][1], tab_sd[pk][1]))
-    print("  contributo FFN AUC        : %.3f ±%.3f" % (tab[pk][2], tab_sd[pk][2]))
+    print("  contribute: attention AUC : %.3f ±%.3f" % (tab[pk][1], tab_sd[pk][1]))
+    print("  contribute: FFN AUC        : %.3f ±%.3f" % (tab[pk][2], tab_sd[pk][2]))
     scarto = tab[pk][1] - tab[pk][2]
     disp = (tab_sd[pk][1] ** 2 + tab_sd[pk][2] ** 2) ** 0.5
-    print("  scarto attn meno ffn      : %+.3f   (dispersione %.3f)" % (scarto, disp))
+    print("  gap attn - ffn      : %+.3f   (dispersione %.3f)" % (scarto, disp))
     if a.perm:
-        print("\n  null di permutazione al picco, sui due contributi:")
+        print("\n  permutation null at peak, on both contribute:")
         for nome, H in (("attn", A[:, pk, :]), ("ffn", Fq[:, pk, :])):
             null = null_permutazione(H, pidx, a.folds, a.seed, a.perm)
             oss = tab[pk][1] if nome == "attn" else tab[pk][2]
@@ -615,7 +618,7 @@ def stage_anatomy(a, R, A, Fq, pidx):
 
 
 def stage_flip(a, R, A, Fq, pidx, P):
-    print("\n[task flip] il gap sull'asse fisso, per blocco, su piu' semi")
+    print("\n[task flip] il gap on fix axis, per block, multi-seed")
     L = A.shape[1]
     scan = list(range(max(1, P - 4), min(P + 6, L - 1) + 1))
     Hax = R[:, P + 1, :]
@@ -634,7 +637,7 @@ def stage_flip(a, R, A, Fq, pidx, P):
         s = math.sqrt(sum((x - m) ** 2 for x in v) / len(v)) if len(v) > 1 else 0.0
         return m, s
 
-    print("blocco |         gap_attn |          gap_ffn |   d'_ffn | verdetto (gap) | verdetto (d')")
+    print("block  |         gap_attn |          gap_ffn |   d'_ffn | verdict (gap) | verdict (d')")
     for b in scan:
         ma, sa = ms(per_blocco[b]["ga"])
         mf, sf = ms(per_blocco[b]["gf"])
@@ -650,7 +653,7 @@ def stage_flip(a, R, A, Fq, pidx, P):
         print("  %4d | %+8.3f±%.3f | %+8.3f±%.3f | %+8.2f | %-14s | %-14s%s"
               % (b, ma, sa, mf, sf, md, v1, v2, segna))
 
-    print("\n=== rotazione contro erosione: differenza media di coppia dell'FFN ===")
+    print("\n=== rotation versus erosion: mean pairwise difference of FFN ===")
     v1v = fit_axis(Hax, pidx)["v1"]
     print("blocco |   ||d|| |    lungo |    orto | cos(d,v1)")
     for b in scan:
@@ -660,9 +663,9 @@ def stage_flip(a, R, A, Fq, pidx, P):
         orto = float((d - lungo * v1v).norm())
         print("  %4d | %7.2f | %+8.3f | %7.2f | %+9.3f"
               % (b, nd, lungo, orto, lungo / max(nd, 1e-8)))
-    print("  la rotazione predice un passaggio LISCIO del coseno per zero su piu'")
-    print("  blocchi a ||d|| circa costante; l'erosione un cambio di segno secco")
-    print("  a picco+1. Leggi la colonna, il verdetto e' tuo.")
+    print("  rotation predicts a SMOOTH zero-crossing of the cosine over multiple")
+    print("  blocks at roughly constant ||d||; erosion predicts a sharp sign flip")
+    print("  at peak+1. Read the column, the verdict is yours.")
 
 
 
@@ -670,48 +673,48 @@ def stage_flip(a, R, A, Fq, pidx, P):
 #  frames: l'asse misurato contro righelli che lo contengono o no
 # =====================================================================
 def stage_frames(a, R, A, Fq, pidx, P):
-    """Il contributo di un blocco, misurato contro righelli diversi.
+    """The contribution of a block, measured against different rulers.
 
-    IL PROBLEMA. Misurare f_b contro l'uscita del blocco b significa fittare il
-    righello su uno stato che CONTIENE f_b. L'allineamento che ne esce puo'
-    essere fabbricato dal righello che misura il proprio ingrediente. E' il
-    controllo che morde chi lo possiede.
+    THE PROBLEM. Measuring f_b against the output of block b means fitting the
+    ruler on a state that CONTAINS f_b. The resulting alignment can be
+    fabricated by the ruler measuring its own ingredient. It is the control
+    that bites the one holding it.
 
-    I DUE RIGHELLI, dalle stesse cache:
-      POST  h_{b+1} = h_b + a_b + f_b        contiene f_b
-      PRE   h_b + a_b                        f_b escluso
+    THE TWO RULERS, from the same caches:
+      POST  h_{b+1} = h_b + a_b + f_b      contains f_b
+      PRE   h_b + a_b                       f_b excluded
 
-    La discriminazione era pre-registrata. Se sotto il righello PRE il termine
-    pro al proprio blocco resta positivo, l'allineamento e' genuino: l'FFN
-    scrive lungo la direzione che il flusso sta gia' costruendo. Se collassa
-    verso zero, quel termine era circolare e la legge pulita e' solo
-    "contro il precedente".
+    The discrimination criterion was pre-registered. If under the PRE ruler
+    the term pro to its own block remains positive, the alignment is genuine:
+    the FFN is writing along the direction the stream is already building.
+    If it collapses toward zero, that term was circular and the clean law
+    is strictly "against the preceding state".
 
-    Il termine anti a b+1 non e' a rischio, perche' f_{b+1} non sta negli stati
-    del blocco b, e deve comparire sotto entrambi i righelli.
+    The anti-term at b+1 is not at risk, because f_{b+1} is not in the states
+    of block b, and must appear under both rulers.
 
-    NESSUN VERDETTO AUTOMATICO: si stampano le matrici e le diagonali.
+    NO AUTOMATIC VERDICT: matrices and diagonals are printed.
     """
     L = A.shape[1]
     offsets = [int(x) for x in a.frame_offsets.split(",")]
     righelli = [P + o for o in offsets if 0 <= P + o < L]
     scan = list(range(max(1, a.frame_scan_start if a.frame_scan_start >= 0 else P - 4),
                       min(P + 6, L - 1) + 1))
-    print("\n[task frames] allineamento genuino o righello circolare?")
-    print("  righelli ai blocchi %s   POST = uscita del blocco (contiene f_b)"
+    print("\n[task frames] genuine alignment or circular ruler?")
+    print("  rulers at blocks %s   POST = block output (contains f_b)"
           % righelli)
-    print("  PRE = h_b + a_b (f_b escluso).  Contributo scandito ai blocchi %d-%d"
+    print("  PRE = h_b + a_b (f_b excluded).  scanned contribution across blocks %d-%d"
           % (scan[0], scan[-1]))
     if getattr(a, "_parallelo", False):
-        print("  ATTENZIONE: blocchi paralleli. Lo stato h_b + a_b non e' uno stato")
-        print("  che il modello attraversa: attenzione e FFN leggono lo stesso")
-        print("  ingresso. Il righello PRE resta calcolabile ma non e' un frame")
-        print("  che esiste nel modello, e va letto come costruzione.")
+        print("  WARNING: parallel blocks. The state h_b + a_b is not a state")
+        print("  that the model traverses: attention and FFN read from the same")
+        print("  input. The PRE ruler remains computable but is not a frame")
+        print("  that exists in the model, and should be read as a construct.")
 
     fuori = {}
     for comp_nome, Hc in (("ffn", Fq), ("attn", A)):
         for tipo in ("post", "pre"):
-            print("\n=========  RIGHELLO %s   componente %s  ========="
+            print("\n=========  RULER %s   component %s  ========="
                   % (tipo.upper(), comp_nome.upper()))
             assi = {}
             for b in righelli:
@@ -730,14 +733,14 @@ def stage_frames(a, R, A, Fq, pidx, P):
             for j, b in enumerate(righelli):
                 db = mat[b][j] if b in mat else float("nan")
                 db1 = mat[b + 1][j] if (b + 1) in mat else float("nan")
-                nota = ("contenuto" if tipo == "post" else "pulito") + \
-                    (", stesso blocco" if comp_nome == "ffn" else "")
+                nota = ("contained" if tipo == "post" else "pulito") + \
+                    (", same block" if comp_nome == "ffn" else "")
                 print("  %8d | %+9.2f | %+10.2f | %s" % (b, db, db1, nota))
             fuori["%s_%s" % (comp_nome, tipo)] = {str(k): v for k, v in mat.items()}
 
-    print("\n  Il righello POST contiene f_b per costruzione, quindi la sua")
-    print("  diagonale non e' pulita. Il righello PRE lo e'. Confronta le due:")
-    print("  se il termine a b sopravvive sotto PRE, e' genuino. La lettura e' tua.")
+    print("\n  IThe POST ruler contains f_b by construction, so its")
+    print("  diagonal is not clean. The PRE ruler is. Compare the two:")
+    print("  if the term at b survives under PRE, it is genuine. The interpretation is yours.")
     return fuori
 
 
@@ -745,12 +748,12 @@ def stage_frames(a, R, A, Fq, pidx, P):
 #  ablazione: azzerare un modulo sulla banda e leggere a valle
 # =====================================================================
 class Azzera:
-    """Mette a zero l'uscita di un modulo sui blocchi indicati.
-
-    Aggancia il modulo che SCRIVE nel residuo: su sandwich e post-norm e' la
-    post-norma, altrove il modulo stesso. Azzerare l'uscita del modulo prima
-    della norma non azzererebbe il contributo, perche' la norma di zero non e'
-    zero quando c'e' un guadagno additivo.
+    """Zeroes a module's output on the given blocks.
+ 
+    Hooks the module that WRITES into the residual: on sandwich and post-norm
+    architectures that is the post-norm, elsewhere the module itself. Zeroing
+    the module's output before the norm would not zero the contribution,
+    because the norm of zero is not zero when there is an additive gain.
     """
 
     def __init__(self, model, arch, blocchi, cosa):
@@ -796,7 +799,7 @@ class Azzera:
 
 
 def auc_refit(H, pidx, folds, seed):
-    """AUC con l'asse RIFITTATO sugli stati della stessa condizione."""
+    """AUC with the axis REFIT on the states of the same condition."""
     a = []
     for tr, te in kfold_pairs(len(pidx), folds, seed):
         ax = fit_axis(H, [pidx[p] for p in tr])
@@ -809,7 +812,8 @@ def auc_refit(H, pidx, folds, seed):
 
 
 def auc_asse_fisso(H_asse, H_val, pidx, folds, seed):
-    """Asse fittato sui train di H_asse, letto sui test di H_val. Stessi fold."""
+    """Axis fit on the training folds of H_asse, read on the test folds of
+    H_val. Same folds throughout."""
     a = []
     for tr, te in kfold_pairs(len(pidx), folds, seed):
         ax = fit_axis(H_asse, [pidx[p] for p in tr])
@@ -822,28 +826,28 @@ def auc_asse_fisso(H_asse, H_val, pidx, folds, seed):
 
 
 def stage_ablazione(a, model, tok, items, pidx, R, arch, dev, P):
-    """Intatto, FFN spenta, attenzione spenta, e il controllo CONGELATO.
-
-    IL CONGELATO NON COSTA UNA CORSA. Con attenzione e FFN azzerate su tutta la
-    banda, lo stato al readout e' identicamente lo stato che ENTRA nella banda.
-    Quindi si legge dalla corsa intatta al livello di ingresso, senza un
-    passaggio in piu'. E' il riferimento giusto: dice quanto varrebbe la
-    leggibilita' se la banda non facesse nulla.
-
-    Se FFN spenta somiglia al congelato, la banda senza FFN non aggiunge nulla.
-    Se FFN spenta sta SOPRA il congelato, l'attenzione nella banda aggiunge
-    segnale che l'FFN normalmente distrugge.
-
-    Si riportano due protocolli: asse RIFITTATO sulla condizione ("resta
-    qualcosa di leggibile") e asse FISSO preso dall'intatto ("la direzione
-    originale sopravvive"). Sono due domande diverse.
+    """Intact, FFN off, attention off, and the FROZEN control.
+ 
+    THE FROZEN CONTROL COSTS NO EXTRA PASS. With attention and FFN zeroed
+    across the whole band, the state at the readout is identically the state
+    ENTERING the band. It is therefore read off the intact run at the entry
+    level, with no additional forward. It is the right reference: it says what
+    readability would be if the band did nothing.
+ 
+    If FFN-off resembles frozen, the band without its FFN adds nothing. If
+    FFN-off sits ABOVE frozen, attention in the band is adding signal that the
+    FFN normally destroys.
+ 
+    Two protocols are reported: axis REFIT on the condition ("is anything still
+    readable") and axis FIXED from the intact run ("does the original direction
+    survive"). They are different questions.
     """
     banda = list(range(P + 1, min(P + 1 + a.banda, arch.n_blocks)))
     ingr = P + 1                      # livello di ingresso alla banda
     ro = min(P + a.banda, arch.n_blocks - 1)
     liv_ro = ro + 1
-    print("\n[task ablazione] intatto, FFN spenta, attenzione spenta, congelato")
-    print("  banda blocchi %s   ingresso al livello %d   lettura al livello %d"
+    print("\n[task ablation] intact, FFN OFF, ATTENTION OFF, FREEZE")
+    print("  band blocks %s   entry at level %d   readout at level %d"
           % (banda, ingr, liv_ro))
 
     H_ingresso = R[:, ingr, :]        # = congelato, senza corse aggiuntive
@@ -867,9 +871,8 @@ def stage_ablazione(a, model, tok, items, pidx, R, arch, dev, P):
         p = auc_asse_fisso(H_ingresso, H, pidx, a.folds, a.seed)
         print("%-22s %9.3f %14.3f %13.3f" % (nome, r, x, p))
         fuori[nome] = dict(rifit=r, asse_lettura=x, asse_ingresso=p)
-    print("\n  Il congelato e' lo stato che entra nella banda: quanto varrebbe la")
-    print("  leggibilita' se la banda non facesse nulla. FFN spenta sopra il")
-    print("  congelato significa che l'attenzione nella banda aggiunge segnale.")
+    print("\n  congelato (freeze); intatto (intact); FFN spenta (ffn-off); attenzione spenta (attention-off)")
+
     return fuori
 
 
@@ -884,54 +887,53 @@ def leggi_livello(model, tok, items, device, batch, livello):
 
 
 def stage_geometria(a, R, pidx, P):
-    """Quante dimensioni occupano gli stati, e quante ne occupa la verita'.
-
-    Serve a rispondere a una domanda che l'AUC da sola non decide: un asse che
-    legge poco puo' significare che il segnale e' debole, oppure che e' forte ma
-    sparso su molte direzioni. Sono due mondi diversi e vanno separati con una
-    misura, non con un'intuizione sull'architettura.
-
-    QUATTRO NUMERI, tutti adimensionali o normalizzati, quindi confrontabili fra
-    modelli con d diverso.
-
-    anisotropia   ||media|| / dispersione media attorno alla media. Quanto della
-                  norma tipica di uno stato e' un offset condiviso da tutti. Un
-                  flusso residuo dominato da una direzione comune ha valore
-                  alto; una nuvola centrata ha valore basso. E' la quantita'
-                  che l'assenza di bias riduce. ATTENZIONE pero': su prove
-                  costruite, cambiando l'offset condiviso di un fattore 25
-                  l'anisotropia passa da 4.25 a 0.17 e l'AUC dell'asse non si
-                  muove (0.729 contro 0.743). Il motivo e' algebrico: l'asse si
-                  fitta sulle DIFFERENZE di coppia, e qualunque componente
-                  condivisa dai due membri, bias compreso, si cancella
-                  esattamente. Il numero si stampa perche' e' interessante di
-                  suo, non perche' spieghi la leggibilita'.
-
-    rango stati   rango effettivo (esponenziale dell'entropia di von Neumann
-                  dello spettro) degli stati centrati, diviso per il numero di
-                  dimensioni disponibili. Quanto e' larga la nuvola.
-
-    rango diff    lo stesso sulle DIFFERENZE di coppia, che sono l'oggetto su
-                  cui la SVD fitta l'asse. Questo e' il numero che parla della
-                  dimensionalita' della VERITA', non degli stati in generale, ed
-                  e' quindi il piu' vicino alla rivendicazione della Parte I.
-
-    quota di s1   frazione di energia delle differenze catturata dalla prima
-                  componente singolare. Se la verita' e' concentrata su un asse
-                  questa e' alta; se e' spalmata, bassa. Un asse debole con
-                  quota alta e' un segnale piccolo ma concentrato; un asse
-                  debole con quota bassa e' un segnale sparso.
-
-    Sulle stesse prove costruite la quota di s1 e' l'unico dei quattro che
-    segue la leggibilita': 0.038 e 0.037 dove l'asse legge 0.73 e 0.74, contro
-    0.016 dove legge 0.506, con il controllo fermo a 0.015 in tutti i casi. Il
-    rango effettivo si muove poco perche' e' dominato dalla varianza di
-    argomento. Leggi prima la quota, poi il resto.
-
-    Il blocco iniziale serve da controllo: prima che i blocchi lavorino, la
-    quota di s1 sulle differenze non ha motivo di essere alta.
-    """
-    print("\n[task geometria] la nuvola: quanto e' larga, e quanto lo e' la verita'")
+    """How many dimensions the states occupy, and how many truth occupies.
+ 
+    It answers a question the AUC alone does not settle: an axis that reads
+    little may mean the signal is weak, or that it is strong but spread over
+    many directions. These are two different worlds and they must be separated
+    by a measurement, not by an intuition about the architecture.
+ 
+    FOUR NUMBERS, all dimensionless or normalised, and therefore comparable
+    across models with different d.
+ 
+    anisotropy    ||mean|| / mean spread around the mean. How much of a state's
+                  typical norm is an offset shared by all of them. A residual
+                  stream dominated by a common direction scores high; a centred
+                  cloud scores low. It is the quantity the absence of bias
+                  reduces. NOTE, however: on planted data, changing the shared
+                  offset by a factor of 25 moves anisotropy from 4.25 to 0.17
+                  while the axis AUC does not move (0.729 against 0.743). The
+                  reason is algebraic: the axis is fit on pair DIFFERENCES, and
+                  any component shared by both members, bias included, cancels
+                  exactly. The number is printed because it is interesting in
+                  itself, not because it explains readability.
+ 
+    state rank    effective rank (exponential of the von Neumann entropy of the
+                  spectrum) of the centred states, divided by the number of
+                  available dimensions. How wide the cloud is.
+ 
+    diff rank     the same on pair DIFFERENCES, which are the object the SVD
+                  fits the axis on. This is the number that speaks to the
+                  dimensionality of TRUTH rather than of states in general, and
+                  is therefore the closest to the Part I claim.
+ 
+    s1 share      fraction of the differences' energy captured by the first
+                  singular component. If truth is concentrated on one axis this
+                  is high; if it is spread out, low. A weak axis with a high
+                  share is a small but concentrated signal; a weak axis with a
+                  low share is a diffuse one.
+ 
+    On the same planted data the s1 share is the only one of the four that
+    tracks readability: 0.038 and 0.037 where the axis reads 0.73 and 0.74,
+    against 0.016 where it reads 0.506, with the control fixed at 0.015 in every
+    case. The effective rank barely moves because it is dominated by the
+    variance of the topic. Read the share first, then the rest.
+ 
+    The early block serves as a control: before the blocks have done any work,
+    the s1 share on the differences has no reason to be high.
+"""
+    print("\n[task geometry] the cloud: how wide it is, and how wide is the truth")
 
     def misura(H, pidx):
         X = H.float()
@@ -953,38 +955,38 @@ def stage_geometria(a, R, pidx, P):
                     rd=er_d["effective_rank"], rd_n=er_d["effective_rank"] / tetto_d,
                     quota=quota)
 
-    righe = [("blocco 0 (controllo)", misura(R[:, 1, :], pidx)),
-             ("picco, blocco %d" % P, misura(R[:, P + 1, :], pidx))]
-    print("  %-22s %10s %10s %10s %10s" % ("livello", "anisotropia",
-                                           "rango st.", "rango dif.", "quota s1"))
+    righe = [("block 0 ", misura(R[:, 1, :], pidx)),
+             ("peak, block %d" % P, misura(R[:, P + 1, :], pidx))]
+    print("  %-22s %10s %10s %10s %10s" % ("layer", "anisotropy",
+                                           "rank st.", "rank dif.", "quota s1"))
     for nome, m in righe:
         print("  %-22s %10.2f %10.3f %10.3f %10.3f"
               % (nome, m["aniso"], m["rs_n"], m["rd_n"], m["quota"]))
     m = righe[1][1]
-    print("\n  in assoluto al picco: rango effettivo stati %.1f su %d disponibili, "
-          "differenze %.1f" % (m["rs"], min(R.shape[0], R.shape[2]), m["rd"]))
-    print("  I quattro numeri non hanno soglie: si leggono CONTRO gli stessi")
-    print("  numeri sugli altri modelli, allo stesso protocollo e allo stesso n.")
+    print("\n  in absolute terms at peak: effective rank of states %.1f su %d available, "
+          "differences %.1f" % (m["rs"], min(R.shape[0], R.shape[2]), m["rd"]))
+    print("  The four numbers have no fixed thresholds: they are read AGAINST the exact same")
+    print("  numbers from other models, using the same protocol and size n.")
     return righe[1][1]
 
 
 def stage_categories(a, Rg, Fg, pset, P, early):
-    print("\n[task categories] l'asse e' una MISCELA di componenti per categoria?")
+    print("\n[task categories] axis is a mixture of categories??")
     per_cat = pset.by_category()
     Hp = Rg[:, P + 1, :]
     He = Rg[:, early + 1, :]
     cats, Mp, assi = matrice_coseni(Hp, per_cat)
     _, Me, _ = matrice_coseni(He, per_cat)
     for nome, M in (("PICCO", Mp), ("EARLY (blocco %d)" % early, Me)):
-        print("\n=== coseni SEGNATI fra assi per categoria @ %s ===" % nome)
+        print("\n=== SIGNED cosines between axes per category @ %s ===" % nome)
         print("      " + "".join("%8s" % c for c in cats))
         for i, c in enumerate(cats):
             print("%6s" % c + "".join("%8.2f" % M[i, j] for j in range(len(cats))))
         off = [float(M[i, j]) for i in range(len(cats)) for j in range(len(cats)) if i < j]
-        print("  media fuori diagonale %+.2f   negativi: %d/%d"
+        print("  off diagonal mean %+.2f   negative: %d/%d"
               % (sum(off) / len(off), sum(1 for x in off if x < 0), len(off)))
     _, T = matrice_trasferimento(Hp, per_cat, a.folds, a.seed)
-    print("\n=== AUC di trasferimento @ PICCO (asse riga -> dati colonna) ===")
+    print("\n=== AUC transfer @ PICCO (asse riga -> dati colonna) ===")
     print("      " + "".join("%8s" % c for c in cats))
     for i, c in enumerate(cats):
         print("%6s" % c + "".join("%8.3f" % T[i, j] for j in range(len(cats))))
@@ -997,13 +999,13 @@ def stage_categories(a, Rg, Fg, pset, P, early):
     etich = [p.category for p in pset.pairs]
     Df = torch.stack([Fg[it, P + 1, :] - Fg[iff, P + 1, :] for it, iff in pidx])
     De = torch.stack([Rg[it, early + 1, :] - Rg[iff, early + 1, :] for it, iff in pidx])
-    print("\n=== decodifica della categoria (centroide vicino, %d fold, %d perm) ==="
+    print("\n=== categories decoding (nearest centroid, %d fold, %d perm) ==="
           % (a.folds, a.perm_cat))
     for nome, D in (("write Delta f @ layer %d" % (P + 1), Df),
-                    ("residuo EARLY Delta h @ blocco %d (baseline lessicale)" % early, De)):
+                    ("residuo EARLY Delta h @ blocco %d (lexical baseline)" % early, De)):
         acc, nm, n95, p = decodifica_con_null(D, etich, a.folds, a.seed, a.perm_cat)
         print("  %s:" % nome)
-        print("    accuratezza %.2f%%   null media %.2f%%  null 95pct %.2f%%  p=%.4f  (caso %.2f%%)"
+        print("    accuracy %.2f%%   null media %.2f%%  null 95pct %.2f%%  p=%.4f  (chance %.2f%%)"
               % (100 * acc, 100 * nm, 100 * n95, p, 100 / len(cats)))
     return cats, Mp, Me, T, assi, Df
 
@@ -1029,8 +1031,8 @@ def stage_dizionario(a, out, cats, Mp, Me, T, assi, Df, pset, P, early, med,
         len(cats), a.pairs_per_relation, a.seed)
     p = os.path.join(d, nome)
     if os.path.exists(p) and not a.force:
-        sys.exit("[stop] %s esiste gia'. Usa --force solo se sai di volerlo "
-                 "sovrascrivere: un bundle riscritto perde la sua provenienza." % p)
+        sys.exit("[stop] %s It already exists'. Use --force only if you know you want "
+                 "to overwrite it: with re-write a bundle, the previous one will be replaced." % p)
     torch.save(bundle, p)
     with open(p.replace(".pt", ".json"), "w", encoding="utf-8") as f:
         json.dump(dict(meta, cats=cats,
@@ -1078,19 +1080,19 @@ def stage_gauge(a, out, thin=0.10):
         # eigengap relativo: la condizione a priori di identificabilita'
         gap = float((ev[-1] - ev[-2]) / ev[-1]) if len(ev) > 1 else float("nan")
         print("\n=== %s   K=%d   gauge: consenso spettrale ===" % (p, len(cats)))
-        print("  [provenienza] modello %s  blocco %s  n=%s  suffisso %r  seed %s"
+        print("  [provenance] model %s  block %s  n=%s  suffix %r  seed %s"
               % (meta.get("model", "?"), meta.get("peak_block", "?"),
                  meta.get("pairs_per_relation", "?"),
                  meta.get("sentence_suffix"), meta.get("seed", "?")))
-        print("  eigengap relativo %.3f  (piccolo = segno non identificabile)" % gap)
+        print("  relative eigengap %.3f  (thin = unidentifiable sign)" % gap)
         segni = []
         for i, c in enumerate(cats):
             m = float(u[i])
             s_ = 1.0 if m >= 0 else -1.0
             segni.append(s_)
-            print("  %-6s margine = %+.3f%s%s"
-                  % (c, m, "  [girata]" if s_ < 0 else "",
-                     "  <-- SOTTILE, riportare senza segno" if abs(m) < thin else ""))
+            print("  %-6s margin = %+.3f%s%s"
+                  % (c, m, "  [flip]" if s_ < 0 else "",
+                     "  <-- thin, riportare senza segno" if abs(m) < thin else ""))
         S = torch.tensor(segni)
         Ag = torch.stack([unit((b["axes"].float() * S.unsqueeze(1))[i])
                           for i in range(len(cats))])
@@ -1111,47 +1113,57 @@ def stage_gauge(a, out, thin=0.10):
         dst = os.path.splitext(p)[0] + "_gauge.json"
         with open(dst, "w", encoding="utf-8") as f:
             json.dump(fuori, f, indent=1)
-        print("  girate: %s   sottili: %s"
+        print("  flip: %s   thin: %s"
               % (fuori["flipped_vs_original"] or "nessuna",
                  fuori["thin_categories"] or "nessuna"))
-        print("  [salvato] %s" % dst)
+        print("  [saved] %s" % dst)
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[1],
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--model", required=True)
-    ap.add_argument("--stages", default="behav,signal")
+    ap.add_argument("--stages", default="behav,signal",
+                    help="comma-separated, run in this order: "
+                         "behav (know-rate) and signal (finds the peak) come "
+                         "first and need no landmarks; anatomy, flip, frames, "
+                         "ablazione, geometria, categories, dizionario, gauge "
+                         "all require peak_block in landmarks.json; signal prints the exact value to write."
+                         "'all' runs everything, 'rest' everything after signal")
     ap.add_argument("--outdir", default=None)
     ap.add_argument("--max-pairs", type=int, default=250)
-    ap.add_argument("--k-relations", type=int, default=8)
+    ap.add_argument("--k-relations", type=int, default=8,
+                    help="number of relation categories")
     ap.add_argument("--pairs-per-relation", type=int, default=60)
     ap.add_argument("--early-block", type=int, default=2)
-    ap.add_argument("--folds", type=int, default=5)
-    ap.add_argument("--seeds", type=int, default=5)
-    ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--perm", type=int, default=200)
+    ap.add_argument("--folds", type=int, default=5,
+                    help="cross-validation folds ")
+    ap.add_argument("--seeds", type=int, default=5,
+                    help="number of seeds to average over")
+    ap.add_argument("--seed", type=int, default=0,
+                    help="sampling seed for pair selection")
+    ap.add_argument("--perm", type=int, default=200,
+                    help="permutation null (p-value) ")
     ap.add_argument("--perm-cat", type=int, default=100)
     ap.add_argument("--n-behav", type=int, default=200)
     ap.add_argument("--batch", type=int, default=8)
     ap.add_argument("--suffix", default=".")
     ap.add_argument("--device", default="auto")
     ap.add_argument("--max-vram", default=None,
-                    help="tetto di VRAM, es. 9GiB. Attiva l'offload ordinato "
-                         "di accelerate al posto del travaso silenzioso del driver")
+                    help="tetto di VRAM, es. 9GiB. Activate offload of "
+                         "accelerate instead silent offload of driver")
     ap.add_argument("--truncate-layers", type=int, default=None,
-                    help="carica solo i primi N blocchi. Esatto per tutto cio' "
-                         "che si legge sotto N, inutilizzabile per il know-rate")
+                    help="load only the first N blocks. Exact for anything read below N, unusable for the know-rate")
     ap.add_argument("--offload-folder", default=None,
-                    help="cartella su disco per i pesi che non stanno in RAM")
+                    help="offload folder in disk")
     ap.add_argument("--file-counterfact", default=None)
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--json", default=None)
     ap.add_argument("--frame_offsets", default="-4,-2,0,2",
-                    help="Offset dei frame come da paper: p-4, p-2, p, p+2")
+                    help="Offset frames table of the paper PRE/POST: p-4, p-2, p, p+2")
     ap.add_argument("--frame_scan_start", type=int, default=-1)
     ap.add_argument("--banda", type=int, default=3,
-                    help="Ampiezza banda ablazione (es. 16-18 = 3)")
+                    help="ablation band width: blocks peak+1 to peak+banda, read at the end")
     # ----------------------------------------------------
     # ----------------------------------------------------
 
@@ -1167,7 +1179,7 @@ def main():
               else [s.strip() for s in a.stages.split(",")])
     for s in stages:
         if s not in STAGES:
-            sys.exit("stage sconosciuto: %s (scegli fra %s)" % (s, STAGES))
+            sys.exit("unknow stage: %s (chose %s)" % (s, STAGES))
 
     print("=" * 66)
     print("CAMPAGNA   truthprobe %s" % __version__)
@@ -1188,7 +1200,7 @@ def main():
                      k_relations=a.k_relations,
                      pairs_per_relation=a.pairs_per_relation,
                      max_pairs=a.max_pairs)
-    print("[protocollo] suffisso %r  join %s  pool %s  seed %d"
+    print("[protocol] suffix %r  join %s  pool %s  seed %d"
           % (proto.suffix, proto.join, proto.pool, proto.seed))
 
     if "behav" in stages:
@@ -1217,9 +1229,9 @@ def main():
                 torch.cuda.empty_cache()
         rel = errore_identita(R, A, Fq)
         med = float(rel.median())
-        print("[cancello] attn + ffn = delta del residuo, mediana %.2e" % med)
+        print("[identity gate] attn + ffn = residual delta, median %.2e" % med)
         if med > 1e-3:
-            sys.exit("[stop] scomposizione non valida: niente sotto questa riga "
+            sys.exit("[stop] decomposition not valid: niente sotto questa riga "
                      "avrebbe significato.")
         if "signal" in stages:
             stage_signal(a, R, ps.pidx)
@@ -1246,7 +1258,7 @@ def main():
                                      whitelist=WHITELIST_8[:a.k_relations]
                                      if a.k_relations == 8 else None,
                                      local_file=a.file_counterfact)
-        print("[data] %d frasi = %d coppie, %d categorie"
+        print("[data] %d phrase = %d pairs, %d categories"
               % (len(pg.items), len(pg.pidx), len(pg.categories)))
         avvisa_taglia(a.model, a.device, a.max_vram)
         tok, model = carica(a.model, a.device, a.max_vram, a.offload_folder, a.truncate_layers)
@@ -1257,9 +1269,9 @@ def main():
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         medg = float(errore_identita(Rg, Ag, Fg).median())
-        print("[cancello] mediana %.2e" % medg)
+        print("[gate] median %.2e" % medg)
         if medg > 1e-3:
-            sys.exit("[stop] scomposizione non valida.")
+            sys.exit("[stop] decomposition not valid.")
         res = stage_categories(a, Rg, Fg, pg, P, a.early_block)
         if "dizionario" in stages:
             # l'asse globale: un asse solo su TUTTE le coppie insieme, che e'
@@ -1276,9 +1288,9 @@ def main():
             json.dump(dict(modello=a.model, picco=P, protocollo=proto.key()
                            if hasattr(proto, "key") else None,
                            metriche=METRICHE), f, indent=1, default=float)
-        print("\n[json] metriche scritte in %s" % a.json)
+        print("\n[json] Data write in %s" % a.json)
 
-    print("\n[fine] la lettura appartiene al ricercatore.")
+    print("\n[end] la lettura appartiene al ricercatore.")
 
 
 if __name__ == "__main__":
