@@ -1,41 +1,40 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""gatevalue.py  --  un compito solo: congelare il gate o il valore.
-
-Replica `swiglu.py gatefreeze` del corpus canonico, con le stesse scelte, su
-architetture che il canonico non copre (post-norm, e in generale qualunque
-collocazione della norma). Non fa altro: nessuno stage, nessun cancello di
-predizioni, nessun bundle. Meno pezzi mobili possibile.
-
-LE QUATTRO SCELTE CHE DEVONO COINCIDERE COL CANONICO
-
-  1. DOVE si legge il gate. All'uscita dell'ATTIVAZIONE (mlp.act_fn), non alla
-     proiezione. Silu non e' lineare, quindi silu(media) non e' media(silu):
-     congelare prima o dopo sono due operazioni diverse, e agganciare
-     gate_proj inverte il segno del risultato.
-
-  2. QUANTE posizioni. Solo l'ULTIMO token, perche' e' li' che si legge lo
-     stato. Congelare tutta la sequenza e' un intervento diverso e piu' ampio.
-
-  3. QUALE media. Quella della corsa INTATTA, memorizzata prima. Intervenendo
-     su piu' blocchi, la media calcolata al volo al secondo blocco verrebbe da
-     uno stato che il primo ha gia' alterato.
-
-  4. COME si legge l'AUC. Asse RIFITTATO sugli stati della stessa condizione,
-     con gli stessi fold. E' il protocollo di ffn_erosion ablate.
-
-IL RIFERIMENTO CONGELATO non costa una corsa: azzerando attenzione e FFN su
-tutta la banda, lo stato al readout e' identicamente quello che entra nella
-banda, quindi si legge dall'intatto al livello di ingresso.
-
-NON SI APPLICA dove l'FFN non ha un gate: Phi usa fc1/fc2 con GELU, i MoE
-hanno l'FFN instradato senza gate_proj a livello di strato. In quei casi il
-programma lo dice e si ferma, invece di agganciare la cosa sbagliata.
-
+"""gatevalue.py  --  one job only: freeze the gate or the value.
+ 
+Replicates `swiglu.py gatefreeze` from the canonical corpus, with the same
+choices, on architectures the canonical code does not cover (post-norm, and in
+general any placement of the norm). It does nothing else: no stages, no
+prediction gate, no bundles. As few moving parts as possible.
+ 
+THE FOUR CHOICES THAT MUST MATCH THE CANONICAL CODE
+ 
+  1. WHERE the gate is read. At the output of the ACTIVATION (mlp.act_fn), not
+     of the projection. SiLU is not linear, so silu(mean) is not mean(silu):
+     freezing before or after are two different operations, and hooking
+     gate_proj reverses the sign of the result.
+ 
+  2. HOW MANY positions. Only the LAST token, because that is where the state
+     is read. Freezing the whole sequence is a different and much broader
+     intervention.
+ 
+  3. WHICH mean. The one from the INTACT run, cached beforehand. When
+     intervening on several blocks, a mean computed on the fly at the second
+     block would come from a state the first has already altered.
+ 
+  4. HOW the AUC is read. Axis REFIT on the states of the same condition, with
+     the same folds. It is the protocol of ffn_erosion ablate.
+ 
+THE FROZEN REFERENCE costs no extra pass: with attention and FFN zeroed across
+the whole band, the state at the readout is identically the one entering the
+band, so it is read off the intact run at the entry level.
+ 
+IT DOES NOT APPLY where the FFN has no gate: Phi uses fc1/fc2 with GELU, and
+MoE models have a routed FFN with no layer-level gate_proj. In those cases the
+program says so and stops, instead of hooking the wrong thing.
+ 
     python gatevalue.py --model Qwen/Qwen2.5-1.5B --peak 15
     python gatevalue.py --model modelli\\OLMo-2-1B --peak 8 --json olmo_gv.json
-
-Compagno di arXiv:2607.16741. Licenza CC BY 4.0.
 """
 
 import argparse
