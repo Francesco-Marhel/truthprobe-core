@@ -101,7 +101,7 @@ def gate_predizioni(out, modello):
 
 
 def gate_landmarks(out, stages):
-    """Il picco lo decide il ricercatore, non un argmax dentro un tool."""
+    """The peak is chosen by the researcher, not by an argmax inside a tool."""
     lm = os.path.join(out, "landmarks.json")
     if not any(s in DOPO_PICCO for s in stages):
         return None
@@ -141,26 +141,26 @@ def stima_gb(nome):
 
 def carica(nome, device, max_vram=None, offload_folder=None, tronca=None,
            dtype=torch.float32):
-    """Il modello in float32, con offload ordinato se non ci sta in VRAM.
+    """The model in float32, with orderly offload if it does not fit in VRAM.
 
-    float32 NON e' negoziabile PER LA GEOMETRIA: in bfloat16 il delta del
-    residuo soffre cancellazione catastrofica (norme grandi meno differenze
-    piccole) e il cancello di identita' fallisce per motivi numerici, non
-    fisici. Il know-rate e' un'altra cosa: confronta completazioni greedy, non
-    identita' additive, e in bfloat16 da' lo stesso risultato occupando meta'
-    memoria. Per questo stage_behav passa dtype esplicitamente.
+    float32 is NOT negotiable FOR THE GEOMETRY: in bfloat16 the residual delta
+    suffers catastrophic cancellation (large norms minus small differences) and
+    the identity gate fails for numerical rather than physical reasons. The
+    know-rate is another matter: it compares greedy completions, not additive
+    identities, and in bfloat16 gives the same result in half the memory. This
+    is why stage_behav passes dtype explicitly.
 
-    IL TRANELLO DELLA VRAM. Su Windows il driver NVIDIA, invece di dare errore
-    quando la memoria finisce, travasa in silenzio nella RAM di sistema. Il
-    modello gira lo stesso, ma ogni forward attraversa il bus PCIe e il tempo
-    esplode: misurato, 176 secondi contro i 2.3 di un modello che ci sta. Il
-    sintomo laterale sono i buffer audio che saltano, perche' il bus e' saturo.
+    THE VRAM TRAP. On Windows the NVIDIA driver, instead of raising an error
+    when memory runs out, silently spills into system RAM. The model still
+    runs, but every forward crosses the PCIe bus and the time explodes:
+    measured, 176 seconds against 2.3 for a model that fits. The side symptom is
+    audio buffers dropping, because the bus is saturated.
 
-    Con --max-vram si passa ad accelerate, che divide i blocchi fra GPU e CPU
-    in modo dichiarato invece che lasciarlo decidere al driver. Gli stage di
-    questo file leggono solo attivazioni, mai pesi, quindi il dispositivo meta
-    non e' un problema; se in futuro servisse leggere un peso offloadato,
-    hooks.offloaded_tensor lo recupera dalla mappa di accelerate.
+    With --max-vram the loading goes through accelerate, which splits the blocks
+    between GPU and CPU by declaration instead of leaving it to the driver. The
+    stages in this file read activations only, never weights, so the meta device
+    is not a problem; should an offloaded weight ever need reading,
+    hooks.offloaded_tensor recovers it from accelerate's map.
     """
     from transformers import AutoTokenizer, AutoModelForCausalLM
     tok = AutoTokenizer.from_pretrained(nome, trust_remote_code=False)
@@ -277,13 +277,12 @@ def auc_variante(Hl, pidx, folds, seed, variante="1D"):
 
 
 def null_permutazione(Hl, pidx, folds, seed, nperm, variante="1D", scegli=None):
-    """Permutation Null: swap true and false, and rifit.
+    """Permutation null: swap true and false within pairs, and refit.
 
-    Se `scegli` e' una funzione, viene applicata a ogni ripetizione per
-    riprodurre anche la selezione (per esempio la scelta dello strato
-    migliore): cosi' il null assorbe l'ottimismo di selezione invece di
-    lasciarlo dentro la stima. E' il motivo per cui nei log canonici la media
-    del null sta sopra 0.500.
+    If `scegli` is a function, it is applied at every repetition so that the
+    selection is reproduced too (the choice of best layer, for instance): the
+    null then absorbs the optimism of selection instead of leaving it inside the
+    estimate. It is why in the canonical logs the null mean sits above 0.500.
     """
     rng = random.Random(seed)
     out = []
@@ -312,13 +311,13 @@ def null_permutazione(Hl, pidx, folds, seed, nperm, variante="1D", scegli=None):
 
 
 def probe_canonico(H, pidx, folds=5, seed=0, iters=300, lr=0.05, l2=1e-2):
-    """canonical linear probe.
+    """Canonical linear probe.
 
-    Standardizza per feature con le statistiche del solo training, ha
-    un'intercetta, e aggrega accumulando TUTTI i punteggi fuori campione in un
-    vettore solo su cui calcola UNA AUC. L'asse invece media le AUC per fold:
-    sono due aggregazioni diverse ai due lati della sottrazione che produce il
-    gap, ed e' bene saperlo quando si legge quel numero.
+    Standardises per feature using training statistics only, has an intercept,
+    and aggregates by accumulating ALL held-out scores into a single vector on
+    which ONE AUC is computed. The axis instead averages the per-fold AUCs:
+    these are two different aggregations on the two sides of the subtraction
+    that produces the gap, and it is worth knowing when reading that number.
     """
     N = H.shape[0]
     oof = torch.zeros(N)
@@ -475,11 +474,11 @@ def decodifica_con_null(D, labels, folds, seed, perms):
 #  stage
 # =====================================================================
 def stage_behav(a, out):
-    """verify behav any geometry.
+    """Verify behaviour before any geometry.
 
-    Corrispondenza di stringa su una completazione greedy corta: e' un limite
-    inferiore rumoroso, non un'etichetta. E NON e' confrontabile fra famiglie,
-    perche' eredita tokenizer e stile di completamento.
+    String match on a short greedy completion: a noisy lower bound, not a label.
+    And it is NOT comparable across families, because it inherits tokenizer and
+    completion style.
     """
     print("\n[task behav] know-rate, before geometry")
     ps = counterfact_flat(CANONICAL, max_pairs=a.n_behav, local_file=a.file_counterfact)
@@ -1047,24 +1046,24 @@ def stage_dizionario(a, out, cats, Mp, Me, T, assi, Df, pset, P, early, med,
 
 
 def stage_gauge(a, out, thin=0.10):
-    """Il gauge di consenso spettrale sul bundle appena scritto.
+    """The spectral consensus gauge, on the bundle just written.
 
-    L'orientamento di una categoria deciso dal suo stesso margine e' instabile
-    quando il margine e' sottile: lo studio sui semi mostrava tempeste di segno.
-    L'autovettore principale della matrice dei coseni e' un riferimento che non
-    fabbrica accordo (due modelli indipendenti gaugiati separatamente danno
-    Mantel +0.003) e che ha una condizione a priori: dove l'eigengap relativo e'
-    piccolo, il segno non e' identificabile e va riportato come tale.
+    A category's orientation decided by its own margin is unstable when that
+    margin is thin: the seed study showed sign storms. The leading eigenvector
+    of the cosine matrix is a reference that cannot manufacture agreement (two
+    independent models gauged separately give Mantel +0.003) and that carries an
+    a priori condition: where the relative eigengap is small, the sign is not
+    identifiable and must be reported as such.
 
-    Legge dal disco invece che dalla memoria, cosi' lo stage gira anche da solo
-    su bundle prodotti in corse precedenti.
+    Reads from disk rather than from memory, so the stage also runs on its own
+    over bundles produced by earlier runs.
     """
     d = os.path.join(out, "dizionari")
     if not os.path.isdir(d):
-        sys.exit("[gauge] nessuna cartella %s: lancia prima lo stage dizionario" % d)
+        sys.exit("[gauge] nno folder %s: run the dizionario stage first" % d)
     pts = sorted(f for f in os.listdir(d) if f.endswith(".pt"))
     if not pts:
-        sys.exit("[gauge] nessun .pt in %s" % d)
+        sys.exit("[gauge] no .pt files in %s" % d)
     for nome in pts:
         p = os.path.join(d, nome)
         b = torch.load(p, map_location="cpu")
@@ -1092,7 +1091,7 @@ def stage_gauge(a, out, thin=0.10):
             segni.append(s_)
             print("  %-6s margin = %+.3f%s%s"
                   % (c, m, "  [flip]" if s_ < 0 else "",
-                     "  <-- thin, riportare senza segno" if abs(m) < thin else ""))
+                     "  <-- thin, riported unsigned" if abs(m) < thin else ""))
         S = torch.tensor(segni)
         Ag = torch.stack([unit((b["axes"].float() * S.unsqueeze(1))[i])
                           for i in range(len(cats))])
@@ -1109,7 +1108,7 @@ def stage_gauge(a, out, thin=0.10):
             if k in b:
                 v = b[k]
                 fuori[k] = v.tolist() if hasattr(v, "tolist") else v
-        fuori["cos_early_note"] = "gauge VECCHIO: il blocco iniziale non ne ha uno stabile"
+        fuori["cos_early_note"] = "OLD gauge: the early block has no stable one"
         dst = os.path.splitext(p)[0] + "_gauge.json"
         with open(dst, "w", encoding="utf-8") as f:
             json.dump(fuori, f, indent=1)
@@ -1186,10 +1185,10 @@ def main():
     print("=" * 66)
     print("[model] %s" % a.model)
     if a.truncate_layers and "behav" in stages:
-        sys.exit("[stop] --truncate-layers toglie i blocchi finali, quindi i "
-                 "logit non hanno senso e il know-rate sarebbe inventato.\n"
-                 "  Misura behav a parte sul modello intero, poi tronca per la "
-                 "geometria.")
+        sys.exit("[stop] --truncate-layers removes the final blocks, so the logits are"
+                 "meaningless and the know-rate would be invented.\n"
+                 "  Measure behav separately on the whole model, then truncate for the "
+                 "geometry.")
     if a.truncate_layers:
         print("[tronca] %d blocchi caricati. Il picco e tutta la banda del flip "
               "devono stare sotto: tieni almeno picco+8." % a.truncate_layers)
@@ -1231,8 +1230,8 @@ def main():
         med = float(rel.median())
         print("[identity gate] attn + ffn = residual delta, median %.2e" % med)
         if med > 1e-3:
-            sys.exit("[stop] decomposition not valid: niente sotto questa riga "
-                     "avrebbe significato.")
+            sys.exit("[stop] decomposition not valid: nothing below this line would mean "
+                     "anything.")
         if "signal" in stages:
             stage_signal(a, R, ps.pidx)
         if "anatomy" in stages:
