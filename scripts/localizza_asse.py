@@ -1,35 +1,33 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""localizza_asse.py  --  dove e' stato letto l'asse di un dizionario?
 
-Due pipeline producono per lo stesso modello un t_global a coseno -0.121, cioe'
-quasi ortogonale. La convenzione della frase da sola darebbe +0.52, misurato.
-Quindi la differenza non e' nella frase: e' in DOVE viene agganciata la lettura.
+"""localizza_asse.py  --  where was a dictionary's axis read?
 
-Non serve indovinare. t_global e' un vettore in d dimensioni, e se lo si
-confronta con l'asse globale fittato a ogni livello e su ogni flusso di una
-nuova estrazione, il massimo del coseno dice dove quel vettore e' nato.
+Two pipelines produce, for the same model, global axes at cosine -0.121: nearly
+orthogonal. The sentence convention alone would give +0.52, measured. So the
+difference is not in the sentence: it is in WHERE the reading is hooked.
 
-  massimo al livello picco+1 sul residuo -> i due leggono nello stesso posto,
-      e la divergenza sta altrove (materiale, semi, orientamento)
-  massimo su attn o ffn -> il dizionario e' stato costruito su una componente
-      diversa da resid
-  massimo a un livello diverso -> off-by-one nella convenzione degli indici
+There is no need to guess. t_global is a vector in d dimensions, and comparing
+it with the global axis fit at every level and on every stream of a fresh
+extraction, the largest cosine says where that vector was born.
 
-SI USA IL VALORE ASSOLUTO del coseno, perche' l'orientamento di un asse e'
-convenzionale: fit_axis lo fissa con la sua regola, e due esecuzioni possono
-uscire con segno opposto senza che niente sia diverso.
+  largest at level peak+1 on the residual -> the two read at the same place,
+      and the divergence lies elsewhere (material, seeds, orientation)
+  largest on attn or ffn -> the dictionary was built on a stream other than
+      the residual
+  largest at a different level -> an off-by-one in the index convention
 
-IL MATERIALE DEVE COINCIDERE. L'asse dipende dalle coppie su cui e' fittato,
-quindi K, n e seme vanno passati uguali a quelli del bundle da localizzare.
-Se il bundle non li registra, si prova la combinazione dichiarata e si legge
-il coseno massimo raggiunto: un massimo basso ovunque significa che nemmeno il
-materiale coincide, e il confronto non e' localizzante.
+THE ABSOLUTE VALUE of the cosine is used, because an axis's orientation is
+conventional: fit_axis fixes it by its own rule, and two runs can come out with
+opposite signs without anything being different.
+
+THE MATERIAL MUST MATCH. The axis depends on the pairs it is fit on, so K, n
+and seed must be passed the same as those of the bundle being located. If the
+bundle does not record them, the declared combination is tried and the largest
+cosine reached is what to read: low everywhere means the material does not match
+either, and the comparison is not localising anything.
 
     python localizza_asse.py --bundle campagne\\X\\dizionari\\truthdict_X.pt \\
         --model <path> --k-relations 8 --pairs-per-relation 60 --seed 0
-
-Compagno di arXiv:2607.16741. Licenza CC BY 4.0.
 """
 
 import argparse
