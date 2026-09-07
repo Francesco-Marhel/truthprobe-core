@@ -1,0 +1,18 @@
+# .github/workflows/compila.yml
+# Un cancello, non un avviso: se un file non si compila, il push diventa rosso.
+# Non esegue niente e non scarica pesi: chiede solo che ogni .py sia analizzabile
+# dall'interprete, che e' esattamente cio' che la modifica via editor web ha rotto.
+name: compila
+
+on: [push, pull_request]
+
+jobs:
+  sintassi:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: ogni file deve essere analizzabile
+        run: python -m compileall -q truthprobe scripts tools
