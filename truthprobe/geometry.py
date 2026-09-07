@@ -119,7 +119,7 @@ def project_fields(Hl, ax):
 
 
 def axis_vector(ax):
-        """Unit vector v1, for those who only need the direction."""
+    """Unit vector v1, for those who only need the direction."""
     return unit(ax["v1"])
 
 

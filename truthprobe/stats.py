@@ -33,7 +33,7 @@ import torch
 #  AUC e fold
 # =====================================================================
 def auc_score(s, y):
-     """Computes the AUC ROC on single sentences, handling ties as 0.5.
+    """Computes the AUC ROC on single sentences, handling ties as 0.5.
     Identical definition to truth_probe.auc_score.
     """
     s = s.float()
@@ -86,7 +86,7 @@ def kfold_pairs(n_pairs, k, seed=0):
 
 
 def se_binomial(p, n):
-      """
+    """
     Standard error of a proportion. 
     Used to avoid misinterpreting an observed delta that falls within 
     sampling noise as a true effect.
@@ -305,7 +305,7 @@ def spearman(x, y):
 
 
 def mantel(A, B, perms=9999, method="pearson", seed=0, chunk=512):
-   """
+    """
     Computes the Mantel test correlation between the off-diagonal elements of two matrices.
     The p-value is derived via joint permutation of rows and columns of one of the matrices.
 

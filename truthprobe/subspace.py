@@ -72,7 +72,7 @@ def _orthonormal(A):
 
 
 def _angles(QA, QB):
-   """
+    """
     Computes the principal angles between two ORTHONORMAL bases, 
     sorted in ascending order (in radians).
 
@@ -138,7 +138,7 @@ def principal_angles(A, B, degrees=True):
 
 
 def subspace_overlap(A, B):
-     """
+    """
     Fraction of the energy from the span of A that falls within the span of B.
 
     It is computed as the mean of the squared cosines of the principal angles, 
@@ -152,7 +152,7 @@ def subspace_overlap(A, B):
 
 
 def spectral_entropy(M, base="e", from_gram=True):
-     """
+    """
     Von Neumann entropy of the spectrum.
 
     M can either be a precomputed Gram matrix (from_gram=True) or a set of row 

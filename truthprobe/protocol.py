@@ -99,7 +99,7 @@ class Protocol:
 
     # ---- identita' e confronto ----
     def key(self):
-    """The fields that determine whether two artifacts are comparable. 'notes' and 
+        """The fields that determine whether two artifacts are comparable. 'notes' and 
     dimension fields are excluded: two bundles with different K remain comparable 
     on shared categories, whereas two with different suffixes do not.
     """
@@ -109,7 +109,7 @@ class Protocol:
         return self.key() == other.key()
 
     def diff(self, other):
-            """The fields that differ, formatted for readable error messages."""
+        """The fields that differ, formatted for readable error messages."""
         a, b = asdict(self), asdict(other)
         return {k: (a[k], b[k]) for k in a if a[k] != b[k]}
 
@@ -139,7 +139,7 @@ class Protocol:
         return replace(self, **kw)
 
     def label(self):
-   """Short string representation for filenames that exposes the chosen convention."""
+        """Short string representation for filenames that exposes the chosen convention."""
         parti = ["s%d" % self.seed]
         if self.k_relations:
             parti.append("K%d" % self.k_relations)

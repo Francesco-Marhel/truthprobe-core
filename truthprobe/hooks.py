@@ -78,7 +78,7 @@ import torch
 # =====================================================================
 @dataclass
 class Wiring:
-        """
+    """
     WHERE to look inside a block. Completely decoupled from WHAT to do with what 
     is captured, which is handled by the rest of the library and never changes.
 
@@ -211,7 +211,7 @@ def _mlp(layer):
 
 
 def describe(model, wiring=None):
-"""Detects the architectural variant. Detection is explicit and conservative: 
+    """Detects the architectural variant. Detection is explicit and conservative: 
     what it does not recognize, it declares instead of guessing."""
     layers = _layers(model)
     layer = layers[0]
@@ -486,7 +486,7 @@ class BlockCapture:
         return False
 
     def _w(self, module, name, attr="weight"):
-    """A block weight, forced onto the CPU and cast to float32, even if it is offloaded.
+        """A block weight, forced onto the CPU and cast to float32, even if it is offloaded.
 
     This is the only point where the library directly reads a model parameter. If the 
     tensor is a placeholder, it attempts to use the weight map from `accelerate`; if 
@@ -508,7 +508,7 @@ class BlockCapture:
         return t.detach().float().cpu()
 
     def _gain(self, norm, name):
-    """The gain of an RMSNorm layer, calculated with the correct convention.
+        """The gain of an RMSNorm layer, calculated with the correct convention.
 
     Gemma stores the parameter as a deviation and multiplies by (1 + w). 
     Llama, Qwen, and OLMo multiply directly by w. Applying the incorrect convention 
@@ -524,7 +524,7 @@ class BlockCapture:
         return t[:, self.pos, :].detach().float().cpu()
 
     def _res(self, t):
-    """WHAT ENTERS the residual stream, not what the module outputs.
+        """WHAT ENTERS the residual stream, not what the module outputs.
 
     Where a residual multiplier exists, the two differ by a factor. It is applied 
     here and not inside `_at`, because `_at` is also used to read the INPUT state 
@@ -542,7 +542,7 @@ class BlockCapture:
         return self._res(self._at(self.buf["f"]))
 
     def heads(self, which=None):
-    """Contribution of each individual head to the residual stream: [B, nH, d].
+        """Contribution of each individual head to the residual stream: [B, nH, d].
 
     `o_proj` is linear, so the contribution of head `h` is its slice of `z` projected 
     with its corresponding slice of `W_o`. In sandwich architectures, the post-norm 
@@ -660,7 +660,7 @@ class BlockCapture:
         return med, med < tol
 
     def bias_term(self):
-    """The bias of o_proj, already passed through the post-norm layer if present.
+        """The bias of o_proj, already passed through the post-norm layer if present.
     It does not belong to any individual head. It cancels out in intra-pair 
     differences; however, it must be accounted for in the identity gate.
     """

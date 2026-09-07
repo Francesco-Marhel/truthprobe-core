@@ -57,7 +57,7 @@ class Pair:
 
 @dataclass
 class PairSet:
-        """Ready pairs, packaged with the protocol that generated them.
+    """Ready pairs, packaged with the protocol that generated them.
 
     items     the sentences in order: for each pair, the true one comes first, then the false one
     pidx      the indices (true, false) pointing into items
@@ -114,7 +114,7 @@ class PairSet:
         c = self.categories
         if c:
             r.append("%d categorie" % len(c))
-        sw = sum(1 for p in self.pairs if p.origin == "scambio")
+        sw = sum(1 for p in self.pairs if p.origin == "swap")
         if sw:
             r.append("%d falsi per scambio dentro relazione" % sw)
         if self.skipped:
@@ -194,7 +194,7 @@ def counterfact_flat(protocol=CANONICAL, max_pairs=250, local_file=None, verbose
 
 def counterfact_by_relation(protocol=CANONICAL, k=33, n_per=60,
                             whitelist=None, local_file=None, verbose=True):
-  """Pairs grouped by Wikidata relation: the K relations with the highest 
+    """Pairs grouped by Wikidata relation: the K relations with the highest 
     number of unique pairs, selecting n_per pairs for each. This represents the sampling 
     of the dictionary family. The uniqueness key is (prompt, true_target), matching 
     the canonical codebase.
