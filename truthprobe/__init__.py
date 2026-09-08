@@ -16,7 +16,7 @@ La versione finisce dentro ogni artefatto salvato, cosi' un bundle sa da quale
 codice e' stato prodotto.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.2"
 
 from .protocol import Protocol, CANONICAL, LEGACY_DICT, COUNTERFACT_REPO, COUNTERFACT_REV
 
