@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "truthprobe"
-version = "0.1.0"
+version = "0.1.2"
 description = "Nucleo condiviso per gli studi sulla direzione di verita' nei modelli linguistici"
 readme = "README.md"
 requires-python = ">=3.9"
-license = {text = "CC-BY-4.0"}
+license = {text = "MIT"}
 authors = [{name = "Francesco Karim Vicidomini"}]
 
 # Dipendenze minime, come da contratto di riproducibilita' del progetto.
